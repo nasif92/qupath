@@ -228,7 +228,7 @@ public class PDL1Tools{
         String n = name.toLowerCase().trim();
 
         // Ignore "non-tumor" cases first
-        if (n.contains("non-tumor") || n.contains("non tumour") || n.contains("nontumor"))
+        if (n.contains("immune") || n.contains("stroma") || n.contains("nontumor"))
             return false;
 
         // Check if it contains any tumor-related keywords
