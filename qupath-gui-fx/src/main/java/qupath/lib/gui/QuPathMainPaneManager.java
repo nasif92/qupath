@@ -59,8 +59,8 @@ class QuPathMainPaneManager {
 	private AnalysisTabPane analysisTabPane;
 	
 	private double lastDividerLocation;
-	
-	
+
+
 	QuPathMainPaneManager(QuPathGUI qupath) {
 		pane = new BorderPane();
 		splitPane = new SplitPane();
