@@ -9,17 +9,16 @@ import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.StackPane;
-import qupath.lib.common.ColorTools;
+import qupath.fx.dialogs.Dialogs;
+import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.viewer.QuPathViewer;
+import qupath.lib.images.ImageData;
 import qupath.lib.measurements.MeasurementList;
 import qupath.lib.objects.PathDetectionObject;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.PathObjects;
-import qupath.lib.objects.classes.PathClass;
 import qupath.lib.regions.ImageRegion;
-import qupath.lib.roi.ROIs;
 import qupath.lib.roi.interfaces.ROI;
-
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -27,45 +26,136 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-public class PDL1Tools{
+public class PDL1Tools {
     // Debounce state for the box updater
     private static final ScheduledExecutorService PDL1_EXEC =
             Executors.newSingleThreadScheduledExecutor(r -> { var t=new Thread(r,"PDL1-view"); t.setDaemon(true); return t; });
 
-
+    private static volatile String CURRENT_USER = "";
     private static ScheduledFuture<?> viewFuture;
 
+    public static void magnify_viewer(QuPathViewer viewer) {
+        // 1️⃣ Save current center in image coordinates
+        double cx = viewer.getCenterPixelX();
+        double cy = viewer.getCenterPixelY();
 
-    public static void run(QuPathViewer viewer) {
-        var imageData = viewer.getImageData();
-        if (imageData == null) return;
+        // 2️⃣ Compute downsample for 20x
+        double nativeMag = viewer.getServer()
+                .getMetadata()
+                .getMagnification();
 
-        // Use viewport center & dynamic size instead of whole-image
-        var node = viewer.getView();
-        double ds = viewer.getDownsampleFactor();
-        double viewW = node.getWidth() * ds, viewH = node.getHeight() * ds;
-        double cx = viewer.getCenterPixelX(), cy = viewer.getCenterPixelY();
-        double boxW = viewW * 0.5, boxH = viewH * 0.5;
+        if (Double.isNaN(nativeMag) || nativeMag <= 0)
+            return;
 
-        var roi = ROIs.createRectangleROI(
-                cx - boxW/2.0, cy - boxH/2.0, boxW, boxH, viewer.getImagePlane());
+        double downsample = nativeMag / 20.0;
 
-        int rgb = ColorTools.packRGB(220, 30, 30);
-        var cls = PathClass.fromString("Nucleus", rgb);
-        var box = PathObjects.createAnnotationObject(roi, cls);
-        box.setName(String.format("PD-L1 Box | %.0fx%.0f", boxW, boxH));
+        // 3️⃣ Apply zoom
+        viewer.setDownsampleFactor(downsample);
 
-        var hier = imageData.getHierarchy();
-        hier.addObject(box, false);
-        hier.getSelectionModel().setSelectedObject(box);
-
-        // If you have detections already segmented, you don’t need Watershed here.
-        // If you still want to run it:
-        // runWatershed(viewer, box, false, () -> updateNameWithCount(viewer, box, "PD-L1 Box"));
+        // 4️⃣ Restore center (important!)
+        viewer.setCenterPixelLocation(cx, cy);
     }
 
 
-    // PD-L1 Events on Viewer. Author: Nasif Hossain
+    public static final class PDL1Keys {
+        public static final String TIMER_START_MS   = "PDL1_TIMER_START_MS";
+        public static final String TIMER_ELAPSED_MS = "PDL1_TIMER_ELAPSED_MS";
+        public static final String TIMER_STOP_MS    = "PDL1_TIMER_STOP_MS";
+        public static final String CPS_SCORE        = "PDL1_CPS";
+        public static final String USERNAME = "Default User";
+
+        private PDL1Keys() {}
+    }
+
+    private static final java.util.concurrent.atomic.AtomicInteger LAST_DENOM_TUMOR = new java.util.concurrent.atomic.AtomicInteger(0);
+    private static final java.util.concurrent.atomic.AtomicInteger LAST_NUCLEI     = new java.util.concurrent.atomic.AtomicInteger(0);
+
+    public static int getLastDenomTumor() { return LAST_DENOM_TUMOR.get(); }
+    public static int getLastNuclei()     { return LAST_NUCLEI.get(); }
+
+    static final class PDL1ProjectUtil {
+        static qupath.lib.projects.ProjectImageEntry<BufferedImage> getEntry(ImageData<BufferedImage> imageData) {
+            if (imageData == null) return null;
+            var project = QuPathGUI.getInstance().getProject();
+            return project == null ? null : project.getEntry(imageData);
+        }
+    }
+    private static PDL1ScoringPane scoringPane;
+    private static QuPathViewer activeViewer;
+
+    public static void showScoringPane(QuPathViewer viewer, boolean toolMode) {
+        activeViewer = viewer;
+        if (scoringPane == null)
+            scoringPane = new PDL1ScoringPane();
+        scoringPane.setToolMode(toolMode);
+        scoringPane.bindTo(viewer.getImageData());
+
+    }
+
+    public static Integer promptForCpsScore(Integer current) {
+        TextInputDialog dlg = new TextInputDialog(current == null ? "" : current.toString());
+        dlg.setTitle("Enter CPS score (0-100)");
+        dlg.setHeaderText(null);          // ✅ removes header (and icon)
+        dlg.setGraphic(null);
+        dlg.setContentText("CPS score:");
+
+        var res = dlg.showAndWait();
+        if (res.isEmpty())
+            return null; // user cancelled
+
+        String txt = res.get().trim();
+        if (txt.isEmpty())
+            return null;
+
+        try {
+            int cps = Integer.parseInt(txt);
+            if (cps < 0 || cps > 100) {
+                Dialogs.showErrorMessage("PD-L1", "CPS must be 0–100.");
+                return null;
+            }
+            return cps;
+        } catch (Exception e) {
+            Dialogs.showErrorMessage("PD-L1", "CPS must be an integer.");
+            return null;
+        }
+    }
+
+    public static void endScoringSession() {
+
+        stopViewportCounter();
+        var gui = QuPathGUI.getInstance();
+        if (gui != null) {
+            gui.hidePdl1ScoringPane();
+        }
+
+        activeViewer = null;
+    }
+
+
+    public static Integer readCpsFromProjectMetadata(ImageData<BufferedImage> imageData) {
+        var entry = PDL1ProjectUtil.getEntry(imageData);
+        if (entry == null) return null;
+        var md = entry.getMetadata();
+        if (md == null) return null;
+        String v = md.get(PDL1Keys.CPS_SCORE);
+        if (v == null) return null;
+        try { return Integer.parseInt(v.trim()); }
+        catch (Exception e) { return null; }
+    }
+
+    public static boolean writeCpsToProjectMetadata(ImageData<BufferedImage> imageData, int cps) {
+        var entry = PDL1ProjectUtil.getEntry(imageData);
+        if (entry == null) {
+            Dialogs.showErrorMessage("PD-L1", "Add the image to a project to store CPS.");
+            return false;
+        }
+        var md = entry.getMetadata();
+        if (md == null) return false;
+        md.put(PDL1Keys.CPS_SCORE, Integer.toString(cps));
+        return true;
+    }
+
+
     // === HUD label we overlay on top of the viewer ===
     private static Label HUD;
     private static StackPane HUDContainer; // the StackPane we attach to
@@ -90,7 +180,7 @@ public class PDL1Tools{
         HUD.setStyle("""
         -fx-background-color: rgba(0,0,0,0.6);
         -fx-text-fill: white;
-        -fx-font-size: 12px;
+        -fx-font-size: 13px;
         -fx-padding: 4 8 4 8;
         -fx-background-radius: 6;
     """);
@@ -119,7 +209,7 @@ public class PDL1Tools{
         Platform.runLater(() -> HUD.setText(s == null ? "" : s));
     }
 
-    public static double[] showPdl1Popup() {
+    public static double[] showPdl1Popup(ImageData<BufferedImage> imageData) {
         Dialog<double[]> dialog = new Dialog<>();
         dialog.setTitle("CPS or TPS thresholds");
 
@@ -162,6 +252,9 @@ public class PDL1Tools{
         // ✅ return only entered numeric thresholds
         dialog.setResultConverter(btn -> {
             if (btn == applyType) {
+                // start timer here
+                PDL1Timer.start(imageData);
+
                 List<Double> vals = new ArrayList<>();
                 for (TextField tf : new TextField[]{t1, t2, t3}) {
                     String txt = tf.getText().trim();
@@ -181,7 +274,7 @@ public class PDL1Tools{
 
     }
 
-    public static void startViewportCounter(QuPathViewer viewer, double[] vals) {
+    public static void startViewportCounter(QuPathViewer viewer) {
         stopViewportCounter(); // ensure only one running at a time
         attachHud(viewer);
 
@@ -191,30 +284,36 @@ public class PDL1Tools{
                 // Defensive checks
                 int denomTumor = events.length > 0 ? events[0] : 0;
                 int nuclei     = events.length > 1 ? events[1] : 0;
+
+                LAST_DENOM_TUMOR.set(denomTumor);
+                LAST_NUCLEI.set(nuclei);
+
                 // 4) Update HUD on the JavaFX thread
                 Platform.runLater(() -> {
+                    if (scoringPane != null) {
+                        scoringPane.updateCounts(denomTumor, nuclei);
+                    }
                     if (denomTumor == 0 && nuclei == 0) {
                         setHudText("No cells detected");
                     } else {
-                        if (vals != null && vals.length > 0) {
-                            StringBuilder sb = new StringBuilder();
+                        StringBuilder sb = new StringBuilder();
+                        sb.append(
+                                "CPS Thresholds: "
+
+                        );
+                        int[] thresholds = {1, 5, 10, 15, 20, 25, 30, 35, 40, 50};
+
+                        for (int p : thresholds) {
+                            double c = denomTumor * p / 100.0;
+
                             sb.append(String.format(
-                                    "CPS or TPS Helpers — Tumor: %d (Denominator) | Nuclei: %d%nThresholds: ",
-                                    denomTumor, nuclei
+                                    "%n%d → %.0f",
+                                    p, c
                             ));
-
-                            for (int i = 0; i < vals.length; i++) {
-                                double t = vals[i];
-                                double thCount = denomTumor * t / 100.0;
-                                sb.append(String.format("%.0f (%.0f)", t, thCount));
-                                if (i < vals.length - 1) sb.append(", "); // comma only between entries
-                            }
-
-                            setHudText(sb.toString());
                         }
+                        setHudText(sb.toString());
                     }
                 });
-
             } catch (Throwable err) {
                 err.printStackTrace();
             }
@@ -271,7 +370,6 @@ public class PDL1Tools{
         var region = ImageRegion.createInstance(x, y, w, h, plane.getZ(), plane.getT());
 
         // Prefer detections collection typed as PathDetectionObject if your API returns it
-
         // Build a single list that includes both detections & annotations
         List<PathObject> objs = new ArrayList<>();
         objs.addAll(hier.getAllDetectionsForRegion((region)));
@@ -315,7 +413,7 @@ public class PDL1Tools{
             }
         }
 
-        int cps = computeCPS(tumor, pImmune,pTumor);
+        int cps = computeCPS(pTumor, pImmune, tumor);
 
         return new int[]{tumor, total, cps};
     }
@@ -329,8 +427,6 @@ public class PDL1Tools{
 //        setHudText("");
         detachHud();
     }
-
-
 
     // Returns CPS (0..100), rounded down
     private static int computeCPS(int pdL1PosTumor, int pdL1PosImmune, int viableTumorCells) {

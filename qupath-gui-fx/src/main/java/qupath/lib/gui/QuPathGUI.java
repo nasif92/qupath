@@ -1352,8 +1352,11 @@ public class QuPathGUI {
 	public static QuPathGUI getInstance() {
 		return instance;
 	}
-	
-	
+
+	public QuPathMainPaneManager getMainPaneManager() {
+		return mainPaneManager;
+	}
+
 	private void activateToolsForViewer(final QuPathViewer viewer) {
 		if (viewer != null)
 			viewer.setActiveTool(toolManager.getSelectedTool());		
@@ -3048,6 +3051,22 @@ public class QuPathGUI {
 		LogTools.logOnce(logger, "QuPathGUI.submitShortTask() is deprecated and will be removed; " +
 						"use QuPathGUI.getThreadPoolManager().submitShortTask() instead");
 		getThreadPoolManager().submitShortTask(runnable);
+	}
+
+	// in QuPathGUI.java
+	public void showPdl1ScoringPane(ImageData<BufferedImage> imageData, boolean toolMode) {
+		if (mainPaneManager != null)
+			mainPaneManager.showPdl1ScoringPane(imageData, toolMode);
+	}
+
+	public void hidePdl1ScoringPane() {
+		if (mainPaneManager != null)
+			mainPaneManager.hidePdl1ScoringPane();
+	}
+
+	public void selectProjectTab() {
+		if (mainPaneManager != null)
+			mainPaneManager.selectProjectTab();
 	}
 
 }

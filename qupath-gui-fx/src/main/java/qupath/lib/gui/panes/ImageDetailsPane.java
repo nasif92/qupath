@@ -101,6 +101,7 @@ import qupath.lib.gui.prefs.PathPrefs;
 import qupath.lib.gui.prefs.PathPrefs.ImageTypeSetting;
 import qupath.fx.utils.GridPaneUtils;
 import qupath.lib.gui.tools.GuiTools;
+import qupath.lib.gui.tools.PDL1Timer;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.ImageData.ImageType;
 import qupath.lib.images.servers.ImageServer;
@@ -110,6 +111,7 @@ import qupath.lib.images.servers.ServerTools;
 import qupath.lib.plugins.parameters.ParameterList;
 import qupath.lib.plugins.workflow.DefaultScriptableWorkflowStep;
 import qupath.lib.plugins.workflow.WorkflowStep;
+import qupath.lib.projects.ProjectImageEntry;
 import qupath.lib.regions.RegionRequest;
 import qupath.lib.roi.RectangleROI;
 import qupath.lib.roi.interfaces.ROI;
@@ -140,7 +142,7 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		NAME, URI, PIXEL_TYPE, MAGNIFICATION, WIDTH, HEIGHT, DIMENSIONS,
 		PIXEL_WIDTH, PIXEL_HEIGHT, Z_SPACING, UNCOMPRESSED_SIZE, SERVER_TYPE, PYRAMID,
 		METADATA_CHANGED, IMAGE_TYPE,
-		STAIN_1, STAIN_2, STAIN_3, BACKGROUND;
+		STAIN_1, STAIN_2, STAIN_3, BACKGROUND, CPS_SCORE;
 	};
 
 	private static List<ImageDetailRow> brightfieldRows;
@@ -742,10 +744,69 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 			return "Stain 3";
 		case BACKGROUND:
 			return "Background";
+		case CPS_SCORE:
+			return "CPS score";
 		default:
 			return null;
 		}
 	}
+
+	private static final String KEY_PDL1_CPS = "PDL1_CPS";
+
+	private static ProjectImageEntry<BufferedImage> getEntry(ImageData<BufferedImage> imageData) {
+		if (imageData == null)
+			return null;
+
+		// Prefer current GUI instance if available, but don’t assume it exists
+		var qupath = QuPathGUI.getInstance();
+		var project = qupath == null ? null : qupath.getProject();
+		return project == null ? null : project.getEntry(imageData);
+	}
+
+	private static Integer getCpsScore(ImageData<BufferedImage> imageData) {
+		var entry = getEntry(imageData);
+		if (entry == null)
+			return null;
+
+		var md = entry.getMetadata();
+		if (md == null)
+			return null;
+
+		String v = md.get(KEY_PDL1_CPS);
+		if (v == null || v.isBlank())
+			return null;
+
+		try {
+			return Integer.parseInt(v.trim());
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	private static boolean setCpsScore(ImageData<BufferedImage> imageData, Integer cps) {
+		var entry = getEntry(imageData);
+		if (entry == null) {
+			Dialogs.showErrorMessage("Set CPS score",
+					"No project entry found.\nAdd the image to a project to store CPS.");
+			return false;
+		}
+
+		var md = entry.getMetadata();
+		if (md == null) {
+			Dialogs.showErrorMessage("Set CPS score",
+					"Project metadata is not available for this entry.");
+			return false;
+		}
+
+		if (cps == null)
+			md.remove(KEY_PDL1_CPS);
+		else
+			md.put(KEY_PDL1_CPS, Integer.toString(cps));
+
+		return true;
+	}
+
+
 
 	private static String decodeURI(URI uri) {
 		try {
@@ -843,6 +904,9 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 			ColorDeconvolutionStains stains = imageData.getColorDeconvolutionStains();
 			double[] whitespace = new double[]{stains.getMaxRed(), stains.getMaxGreen(), stains.getMaxBlue()};
 			return whitespace;
+		case CPS_SCORE:
+			Integer cps = getCpsScore(imageData);
+			return cps == null ? "Not set" : cps;
 		default:
 			return null;
 		}
@@ -891,11 +955,59 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 						tooltipText = "Double-click to reset original metadata";
 					else if (type.equals(ImageDetailRow.UNCOMPRESSED_SIZE))
 						tooltipText = "Approximate memory required to store all pixels in the image uncompressed";
+					else if (type.equals(ImageDetailRow.CPS_SCORE)) {
+						tooltipText = "Double-click to set CPS score (0–100)";
+					}
+
 				}
 			}
 			setStyle(style);
 			setText(text);
 			setTooltip(new Tooltip(tooltipText));
+		}
+
+		private static boolean promptToSetCpsScore(ImageData<BufferedImage> imageData) {
+			Integer current = getCpsScore(imageData);
+			String defaultValue = current == null ? "" : current.toString();
+
+			var params = new ParameterList()
+					.addStringParameter("cps", "CPS score", defaultValue,
+							"Enter CPS score (0–100). Leave blank to clear.");
+
+			var panel = new ParameterPanelFX(params);
+			if (!Dialogs.showConfirmDialog("Set CPS score", panel.getPane()))
+				return false;
+
+			String text = params.getStringParameterValue("cps");
+			if (text == null)
+				return false;
+
+			text = text.trim();
+			if (text.isEmpty()) {
+				if (current == null)
+					return false;
+				setCpsScore(imageData, null);
+				return true;
+			}
+
+			int cps;
+			try {
+				cps = Integer.parseInt(text);
+			} catch (NumberFormatException e) {
+				Dialogs.showErrorMessage("Set CPS score", "CPS must be an integer (0–100).");
+				return false;
+			}
+
+			if (cps < 0 || cps > 100) {
+				Dialogs.showErrorMessage("Set CPS score", "CPS must be in the range 0–100.");
+				return false;
+			}
+
+			if (current != null && current == cps)
+				return false;
+
+			setCpsScore(imageData, cps);
+			return true;
 		}
 
 		private void handleMouseClick(MouseEvent event) {
@@ -923,10 +1035,19 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 						metadataChanged = promptToResetServerMetadata(imageData);
 					}
 				}
+				else if (type == ImageDetailRow.CPS_SCORE) {
+					boolean changed = promptToSetCpsScore(imageData);
+					if (changed) {
+						c.getTableView().refresh();
+						imageData.getHierarchy().fireHierarchyChangedEvent(this);
+					}
+					return;
+				}
 				if (metadataChanged) {
 					c.getTableView().refresh();
 					imageData.getHierarchy().fireHierarchyChangedEvent(this);
 				}
+
 			}
 		}
 		

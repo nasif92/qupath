@@ -24,6 +24,7 @@
 
 package qupath.lib.gui;
 
+import javafx.scene.control.Tab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +35,10 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import qupath.lib.gui.panes.ProjectBrowser;
 import qupath.lib.gui.tools.CommandFinderTools;
+import qupath.lib.gui.tools.PDL1ScoringPane;
+import qupath.lib.images.ImageData;
+
+import java.awt.image.BufferedImage;
 
 /**
  * Inelegantly named class to manage the main components of the main QuPath window.
@@ -54,8 +59,8 @@ class QuPathMainPaneManager {
 	private AnalysisTabPane analysisTabPane;
 	
 	private double lastDividerLocation;
-	
-	
+
+
 	QuPathMainPaneManager(QuPathGUI qupath) {
 		pane = new BorderPane();
 		splitPane = new SplitPane();
@@ -76,6 +81,7 @@ class QuPathMainPaneManager {
 		pane.setCenter(splitPane);
 		
 		toolbar = new ToolBarComponent(
+				qupath,
 				qupath.getToolManager(),
 				qupath.getViewerActions(),
 				qupath.getCommonActions(),
@@ -90,7 +96,14 @@ class QuPathMainPaneManager {
 	AnalysisTabPane getAnalysisTabPane() {
 		return analysisTabPane;
 	}
-	
+	void selectProjectTab() {
+		if (analysisTabPane != null)
+			analysisTabPane.selectProjectTab();
+	}
+
+
+
+
 	ProjectBrowser getProjectBrowser() {
 		return analysisTabPane == null ? null : analysisTabPane.getProjectBrowser();
 	}
@@ -122,9 +135,30 @@ class QuPathMainPaneManager {
 			pane.setCenter(mainViewerPane);				
 		}
 	}
-	
+	private Tab pdl1Tab;
+	private PDL1ScoringPane pdl1Pane;
+
+
 	private boolean analysisPanelVisible() {
 		return pane.getCenter() == splitPane;
 	}
-	
+
+	public void showPdl1ScoringPane(ImageData<BufferedImage> imageData,
+									boolean toolMode) {
+
+		if (analysisTabPane == null)
+			return;
+
+		setAnalysisPaneVisible(true); // ensure left panel is visible
+		analysisTabPane.showPdl1Pane(imageData, toolMode);
+	}
+
+	public void hidePdl1ScoringPane() {
+		if (analysisTabPane == null)
+			return;
+
+		analysisTabPane.hidePdl1Pane();
+	}
+
+
 }

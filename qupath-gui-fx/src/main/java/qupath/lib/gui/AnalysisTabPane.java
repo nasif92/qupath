@@ -47,6 +47,10 @@ import qupath.lib.gui.panes.PathObjectHierarchyView;
 import qupath.lib.gui.panes.ProjectBrowser;
 import qupath.lib.gui.panes.SelectedMeasurementTableView;
 import qupath.lib.gui.panes.WorkflowCommandLogView;
+import qupath.lib.gui.tools.PDL1ScoringPane;
+import qupath.lib.images.ImageData;
+
+import java.awt.image.BufferedImage;
 
 class AnalysisTabPane {
 	
@@ -70,7 +74,9 @@ class AnalysisTabPane {
 	private WorkflowCommandLogView workflowLogView;
 
 	private TabPane tabPane = new TabPane();
-	
+	private PDL1ScoringPane pdl1ScoringPane;
+	private Tab tabPDL1;
+
 	AnalysisTabPane(QuPathGUI qupath) {
 		this.qupath = qupath;
 		createPanes();
@@ -156,8 +162,34 @@ class AnalysisTabPane {
 		titledLog.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
 		var pane = new BorderPane(titledLog);
 		tabPane.getTabs().add(createTab(titleWorkflow, pane));
+
+
+		// --- Add PD-L1 scoring tab ---
+		pdl1ScoringPane = new PDL1ScoringPane();
+		tabPDL1 = new Tab("PD-L1");
+		tabPDL1.setContent(pdl1ScoringPane);
+		tabPane.getTabs().add(tabPDL1);
+
+		// Optional: hide until needed
+		tabPDL1.setDisable(true);
+
 	}
-	
+
+	void showPdl1Pane(ImageData<java.awt.image.BufferedImage> imageData, boolean toolMode) {
+		if (pdl1ScoringPane == null || tabPDL1 == null)
+			return;
+		pdl1ScoringPane.setToolMode(toolMode);
+		pdl1ScoringPane.bindTo((ImageData<BufferedImage>) imageData);
+		tabPDL1.setDisable(false);
+		tabPane.getSelectionModel().select(tabPDL1); // jump to PD-L1 tab
+	}
+
+	void hidePdl1Pane() {
+		if (tabPDL1 == null)
+			return;
+		tabPDL1.setDisable(true);
+	}
+
 	private void makeTabsUndockable() {
 		// Make the tabs undockable
 		for (var tab : tabPane.getTabs()) {
@@ -236,6 +268,11 @@ class AnalysisTabPane {
 			descriptionPane.visibleProperty().bind(visible);
 		}
 		return tabpaneObjectsShared;
+	}
+
+	// just a select back to project tab pane helper
+	void selectProjectTab() {
+		tabPane.getSelectionModel().select(0); // Project tab is first
 	}
 	
 }

@@ -78,6 +78,7 @@ import qupath.lib.gui.scripting.QPEx;
 import qupath.lib.gui.tools.GuiTools;
 import qupath.lib.gui.tools.IconFactory;
 import qupath.lib.gui.tools.IconFactory.PathIcons;
+import qupath.lib.gui.tools.PDL1Timer;
 import qupath.lib.gui.tools.PDL1Tools;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.gui.viewer.QuPathViewerListener;
@@ -88,7 +89,6 @@ import qupath.lib.measurements.MeasurementList;
 import qupath.lib.objects.PathDetectionObject;
 import qupath.lib.objects.PathObject;
 
-import static qupath.lib.gui.tools.PDL1Tools.showPdl1Popup;
 
 class ToolBarComponent {
 
@@ -110,16 +110,17 @@ class ToolBarComponent {
 	private final ToolBar toolbar = new ToolBar();
 
 
-
-	ToolBarComponent(ToolManager toolManager,
-					 ViewerActions viewerManagerActions,
-					 CommonActions commonActions,
-					 AutomateActions automateActions,
-					 OverlayActions overlayActions) {
-		this.toolManager = toolManager;
+    ToolBarComponent(
+			QuPathGUI quPathGUI,		
+			ToolManager toolManager,
+                     ViewerActions viewerManagerActions,
+                     CommonActions commonActions,
+                     AutomateActions automateActions,
+                     OverlayActions overlayActions) {
+        this.toolManager = toolManager;
 		this.viewerProperty = viewerManagerActions.getViewerManager().activeViewerProperty();
 
-		logger.trace("Initializing toolbar");
+        logger.trace("Initializing toolbar");
 		
 		var magLabel = new ViewerMagnificationLabel();
 		viewerProperty.addListener((v, o, n) -> magLabel.setViewer(n));
@@ -140,28 +141,101 @@ class ToolBarComponent {
 		var btnPdl1 = new javafx.scene.control.ToggleButton();
 		btnPdl1.setId("pdl1Button");
 		btnPdl1.setTooltip(new javafx.scene.control.Tooltip("Count PD-L1 events in the view"));
-		btnPdl1.setGraphic(qupath.lib.gui.tools.IconFactory.createNode(
-				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.CELL_NUCLEI_BOTH));
+		Node pdl1Icon = IconFactory.createNode(
+				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.CELL_NUCLEI_BOTH);
+		// initial icon for pdl1
+		btnPdl1.setGraphic(pdl1Icon);
 
+		// TIMING icon
+		Label timerIcon = new Label("\u23F1"); // ⏱
+		timerIcon.setStyle("-fx-font-size: 16px; -fx-padding: 0 2 0 2;");
+		var mainPaneManager = quPathGUI.getMainPaneManager();
+
+		// Avoid re-entrant loops when we programmatically flip the toggle
+		final java.util.concurrent.atomic.AtomicBoolean toggleGuard = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+		// PDL1 button selected listener
 		btnPdl1.selectedProperty().addListener((obs, was, is) -> {
+
+			if (toggleGuard.get())
+				return;
+
 			var viewer = viewerProperty.getValue();
 			if (viewer == null || viewer.getImageData() == null) {
 				Dialogs.showInfoNotification("PD-L1", "Open an image first.");
-				btnPdl1.setSelected(false);
+				toggleGuard.set(true);
+				try { btnPdl1.setSelected(false); }
+				finally { toggleGuard.set(false); }
 				return;
 			}
+
+			// Keep types consistent with your other code
+			@SuppressWarnings("unchecked")
+			var imageData = (qupath.lib.images.ImageData<java.awt.image.BufferedImage>) viewer.getImageData();
+
+			var qupath = QuPathGUI.getInstance();
+			var mgr = qupath.getMainPaneManager(); // may be null early in startup; guard below
+
 			if (Boolean.TRUE.equals(is)) {
-				double[] vals = showPdl1Popup();              // expected: double[3]
-				if (vals == null) {
-					Platform.runLater(() -> btnPdl1.setSelected(false));
-				}
-				else{
-					PDL1Tools.startViewportCounter(viewer,vals);
-				}
+
+				PDL1Timer.start(imageData);
+				PDL1Tools.startViewportCounter(viewer);
+
+				// Hide analysis pane AFTER scoring begins
+				if (mgr != null)
+					mgr.setAnalysisPaneVisible(false);
+
+				// 🔍 Force magnification to 20x
+				Platform.runLater(() -> {
+
+					PDL1Tools.magnify_viewer(viewer)	;
+				});
+				// Swap button to timer state
+				btnPdl1.setGraphic(timerIcon);
+				btnPdl1.setTooltip(new Tooltip("Finish scoring (enter CPS)"));
+
 			} else {
+				// ---- FINISH scoring (prompt CPS) ----
+				Integer current = PDL1Tools.readCpsFromProjectMetadata(imageData);
+				Integer cps = PDL1Tools.promptForCpsScore(current);
+
+				if (cps == null) {
+					// Cancel finish -> keep scoring active, keep toggle ON
+					toggleGuard.set(true);
+					try { btnPdl1.setSelected(true); }
+					finally { toggleGuard.set(false); }
+					return;
+				}
+
+				boolean ok = PDL1Tools.writeCpsToProjectMetadata(imageData, cps);
+				if (!ok) {
+					// Could not save -> keep scoring active
+					toggleGuard.set(true);
+					try { btnPdl1.setSelected(true); }
+					finally { toggleGuard.set(false); }
+					return;
+				}
+
+				// Stop timer + counter
+				PDL1Timer.stop(imageData);
 				PDL1Tools.stopViewportCounter();
+
+				// Restore UI
+				if (mgr != null)
+					mgr.setAnalysisPaneVisible(true);
+
+				// OPTIONAL: if you want the PD-L1 tab to appear after finishing,
+				// show it now (but only if you actually want the analysis pane visible)
+				 if (mgr != null)
+				     mgr.showPdl1ScoringPane(imageData, true);
+
+				// Revert button back to PD-L1 icon
+				btnPdl1.setGraphic(pdl1Icon);
+				btnPdl1.setTooltip(new Tooltip("Start PD-L1 scoring"));
 			}
-		});
+
+
+	});
 
 		nodes.add(createSeparator());
 		nodes.add(btnPdl1);
