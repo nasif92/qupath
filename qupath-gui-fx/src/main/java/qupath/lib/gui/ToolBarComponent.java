@@ -170,7 +170,7 @@ class ToolBarComponent {
 
 			// Keep types consistent with your other code
 			@SuppressWarnings("unchecked")
-			var imageData = (qupath.lib.images.ImageData<java.awt.image.BufferedImage>) viewer.getImageData();
+			ImageData<BufferedImage> imageData = (ImageData<BufferedImage>) viewer.getImageData();
 
 			var qupath = QuPathGUI.getInstance();
 			var mgr = qupath.getMainPaneManager(); // may be null early in startup; guard below
