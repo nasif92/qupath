@@ -89,7 +89,6 @@ import qupath.lib.measurements.MeasurementList;
 import qupath.lib.objects.PathDetectionObject;
 import qupath.lib.objects.PathObject;
 
-
 class ToolBarComponent {
 
 	private static final Logger logger = LoggerFactory.getLogger(ToolBarComponent.class);
@@ -111,7 +110,7 @@ class ToolBarComponent {
 
 
     ToolBarComponent(
-			QuPathGUI quPathGUI,		
+			QuPathGUI quPathGUI,
 			ToolManager toolManager,
                      ViewerActions viewerManagerActions,
                      CommonActions commonActions,
@@ -120,7 +119,7 @@ class ToolBarComponent {
         this.toolManager = toolManager;
 		this.viewerProperty = viewerManagerActions.getViewerManager().activeViewerProperty();
 
-        logger.trace("Initializing toolbar");
+		logger.trace("Initializing toolbar");
 		
 		var magLabel = new ViewerMagnificationLabel();
 		viewerProperty.addListener((v, o, n) -> magLabel.setViewer(n));

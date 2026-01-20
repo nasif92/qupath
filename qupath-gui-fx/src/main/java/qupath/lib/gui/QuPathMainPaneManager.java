@@ -24,7 +24,6 @@
 
 package qupath.lib.gui;
 
-import javafx.scene.control.Tab;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,10 +34,6 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import qupath.lib.gui.panes.ProjectBrowser;
 import qupath.lib.gui.tools.CommandFinderTools;
-import qupath.lib.gui.tools.PDL1ScoringPane;
-import qupath.lib.images.ImageData;
-
-import java.awt.image.BufferedImage;
 
 /**
  * Inelegantly named class to manage the main components of the main QuPath window.
@@ -59,8 +54,8 @@ class QuPathMainPaneManager {
 	private AnalysisTabPane analysisTabPane;
 	
 	private double lastDividerLocation;
-
-
+	
+	
 	QuPathMainPaneManager(QuPathGUI qupath) {
 		pane = new BorderPane();
 		splitPane = new SplitPane();

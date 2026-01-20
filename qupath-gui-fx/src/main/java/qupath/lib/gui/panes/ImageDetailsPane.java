@@ -169,16 +169,17 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		table.setMinHeight(200);
 		table.setPrefHeight(250);
 		table.setMaxHeight(Double.MAX_VALUE);
-		table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+		table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 		TableColumn<ImageDetailRow, String> columnName = new TableColumn<>("Name");
-		columnName.setCellValueFactory(v -> new ReadOnlyStringWrapper(getName(v.getValue())));
+		columnName.setCellValueFactory(v -> new ReadOnlyStringWrapper(v.getValue().getName()));
 		columnName.setEditable(false);
 		columnName.setPrefWidth(150);
+        columnName.setCellFactory(_ -> new ImageDetailNameTableCell());
 		TableColumn<ImageDetailRow, Object> columnValue = new TableColumn<>("Value");
 		columnValue.setCellValueFactory(v -> new ReadOnlyObjectWrapper<>(getValue(v.getValue())));
 		columnValue.setEditable(false);
 		columnValue.setPrefWidth(200);
-		columnValue.setCellFactory(c -> new ImageDetailTableCell(imageDataProperty));
+		columnValue.setCellFactory(_ -> new ImageDetailValueTableCell(imageDataProperty));
 		table.getColumns().add(columnName);
 		table.getColumns().add(columnValue);
 
@@ -657,14 +658,12 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		table.getItems().setAll(getRows());
 		table.refresh();
 
-		if (listAssociatedImages != null) {
-			if (server == null)
-				listAssociatedImages.getItems().clear();
-			else
-				listAssociatedImages.getItems().setAll(server.getAssociatedImageList());
-		}
+        if (server == null)
+            listAssociatedImages.getItems().clear();
+        else
+            listAssociatedImages.getItems().setAll(server.getAssociatedImageList());
 
-		// Check if we're showing associated images
+        // Check if we're showing associated images
 		for (var entry : associatedImageViewers.entrySet()) {
 			var name = entry.getKey();
 			var simpleViewer = entry.getValue();
@@ -744,8 +743,6 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 			return "Stain 3";
 		case BACKGROUND:
 			return "Background";
-		case CPS_SCORE:
-			return "CPS score";
 		default:
 			return null;
 		}
@@ -904,9 +901,6 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 			ColorDeconvolutionStains stains = imageData.getColorDeconvolutionStains();
 			double[] whitespace = new double[]{stains.getMaxRed(), stains.getMaxGreen(), stains.getMaxBlue()};
 			return whitespace;
-		case CPS_SCORE:
-			Integer cps = getCpsScore(imageData);
-			return cps == null ? "Not set" : cps;
 		default:
 			return null;
 		}
@@ -939,9 +933,8 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 			if (item instanceof double[]) {
 				text = GeneralTools.arrayToString(Locale.getDefault(Category.FORMAT), (double[])item, 2);
 				tooltipText = "Double-click to set background values for color deconvolution (either type values or use a small rectangle ROI in the image)";
-			} else if (item instanceof StainVector) {
-				StainVector stain = (StainVector)item;
-				Integer color = stain.getColor();
+			} else if (item instanceof StainVector stain) {
+                Integer color = stain.getColor();
 				style = String.format("-fx-text-fill: rgb(%d, %d, %d);", ColorTools.red(color), ColorTools.green(color), ColorTools.blue(color));
 				tooltipText = "Double-click to set stain color (either type values or use a small rectangle ROI in the image)";
 			} else {
@@ -1047,7 +1040,6 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 					c.getTableView().refresh();
 					imageData.getHierarchy().fireHierarchyChangedEvent(this);
 				}
-
 			}
 		}
 		
@@ -1060,11 +1052,9 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 			int num = -1; // Default to background values
 			String name = null;
 			String message = null;
-			if (value instanceof StainVector) {
+			if (value instanceof StainVector stainVector) {
 
-				StainVector stainVector = (StainVector)value;
-
-				if (stainVector.isResidual() && imageData.getImageType() != ImageType.BRIGHTFIELD_OTHER) {
+                if (stainVector.isResidual() && imageData.getImageType() != ImageType.BRIGHTFIELD_OTHER) {
 					logger.warn("Cannot set residual stain vector - this is computed from the known vectors");
 					return;
 				}
@@ -1156,7 +1146,7 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 
 			// Disable editing the name if it should be fixed
 			ParameterPanelFX parameterPanel = new ParameterPanelFX(params);
-			parameterPanel.setParameterEnabled("name", editableName);;
+			parameterPanel.setParameterEnabled("name", editableName);
 			if (!Dialogs.showConfirmDialog(title, parameterPanel.getPane()))
 				return;
 
@@ -1195,7 +1185,7 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 			imageData.setColorDeconvolutionStains(stains);
 		}
 
-	};
+	}
 	
 
 }
