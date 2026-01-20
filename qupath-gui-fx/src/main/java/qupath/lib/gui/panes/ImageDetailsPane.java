@@ -10,18 +10,88 @@
  * it under the terms of the GNU General Public License as
  * published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
- * 
+ *
  * QuPath is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License 
+ *
+ * You should have received a copy of the GNU General Public License
  * along with QuPath.  If not, see <https://www.gnu.org/licenses/>.
  * #L%
  */
 
 package qupath.lib.gui.panes;
+
+import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+import javafx.event.ActionEvent;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.geometry.Side;
+import javafx.scene.Group;
+import javafx.scene.Node;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContentDisplay;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TitledPane;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
+import javafx.scene.effect.DropShadow;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.RowConstraints;
+import javafx.scene.layout.StackPane;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Ellipse;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.text.TextAlignment;
+import org.controlsfx.control.MasterDetailPane;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import qupath.fx.dialogs.Dialogs;
+import qupath.fx.utils.FXUtils;
+import qupath.fx.utils.GridPaneUtils;
+import qupath.lib.awt.common.BufferedImageTools;
+import qupath.lib.color.ColorDeconvolutionHelper;
+import qupath.lib.color.ColorDeconvolutionStains;
+import qupath.lib.color.StainVector;
+import qupath.lib.common.ColorTools;
+import qupath.lib.common.GeneralTools;
+import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.dialogs.ParameterPanelFX;
+import qupath.lib.gui.prefs.PathPrefs;
+import qupath.lib.gui.prefs.PathPrefs.ImageTypeSetting;
+import qupath.lib.gui.tools.GuiTools;
+import qupath.lib.images.ImageData;
+import qupath.lib.images.ImageData.ImageType;
+import qupath.lib.images.servers.ImageServer;
+import qupath.lib.images.servers.ImageServerMetadata;
+import qupath.lib.images.servers.PixelCalibration;
+import qupath.lib.images.servers.ServerTools;
+import qupath.lib.plugins.parameters.ParameterList;
+import qupath.lib.plugins.workflow.DefaultScriptableWorkflowStep;
+import qupath.lib.plugins.workflow.WorkflowStep;
+import qupath.lib.regions.RegionRequest;
+import qupath.lib.roi.RectangleROI;
+import qupath.lib.roi.interfaces.ROI;
+import qupath.lib.scripting.QP;
 
 import java.awt.image.BufferedImage;
 import java.beans.PropertyChangeEvent;
@@ -44,84 +114,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import javafx.scene.control.TitledPane;
-import org.controlsfx.control.MasterDetailPane;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javafx.application.Platform;
-import javafx.beans.binding.Bindings;
-import javafx.beans.property.ReadOnlyObjectWrapper;
-import javafx.beans.property.ReadOnlyStringWrapper;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
-import javafx.event.ActionEvent;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.geometry.Side;
-import javafx.scene.control.Label;
-import javafx.scene.Group;
-import javafx.scene.Node;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.ContentDisplay;
-import javafx.scene.control.ListView;
-import javafx.scene.control.TableCell;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableView;
-import javafx.scene.control.ToggleButton;
-import javafx.scene.control.ToggleGroup;
-import javafx.scene.control.Tooltip;
-import javafx.scene.effect.DropShadow;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyEvent;
-import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.ColumnConstraints;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.Pane;
-import javafx.scene.layout.RowConstraints;
-import javafx.scene.layout.StackPane;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Ellipse;
-import javafx.scene.shape.Rectangle;
-import javafx.scene.text.TextAlignment;
-import qupath.fx.utils.FXUtils;
-import qupath.lib.awt.common.BufferedImageTools;
-import qupath.lib.color.ColorDeconvolutionHelper;
-import qupath.lib.color.ColorDeconvolutionStains;
-import qupath.lib.color.StainVector;
-import qupath.lib.common.ColorTools;
-import qupath.lib.common.GeneralTools;
-import qupath.lib.gui.QuPathGUI;
-import qupath.fx.dialogs.Dialogs;
-import qupath.lib.gui.dialogs.ParameterPanelFX;
-import qupath.lib.gui.prefs.PathPrefs;
-import qupath.lib.gui.prefs.PathPrefs.ImageTypeSetting;
-import qupath.fx.utils.GridPaneUtils;
-import qupath.lib.gui.tools.GuiTools;
-import qupath.lib.gui.tools.PDL1Timer;
-import qupath.lib.images.ImageData;
-import qupath.lib.images.ImageData.ImageType;
-import qupath.lib.images.servers.ImageServer;
-import qupath.lib.images.servers.ImageServerMetadata;
-import qupath.lib.images.servers.PixelCalibration;
-import qupath.lib.images.servers.ServerTools;
-import qupath.lib.plugins.parameters.ParameterList;
-import qupath.lib.plugins.workflow.DefaultScriptableWorkflowStep;
-import qupath.lib.plugins.workflow.WorkflowStep;
-import qupath.lib.projects.ProjectImageEntry;
-import qupath.lib.regions.RegionRequest;
-import qupath.lib.roi.RectangleROI;
-import qupath.lib.roi.interfaces.ROI;
-import qupath.lib.scripting.QP;
-
 /**
  * A panel used for displaying basic info about an image, e.g. its path, width, height, pixel size etc.
  * <p>
  * It also includes displaying color deconvolution vectors for RGB brightfield images.
- * 
+ *
  * @author Pete Bankhead
  *
  */
@@ -131,23 +128,60 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 
 	private ImageData<BufferedImage> imageData;
 
-	private StackPane pane = new StackPane();
+	private final StackPane pane = new StackPane();
 
-	private TableView<ImageDetailRow> table = new TableView<>();
-	private ListView<String> listAssociatedImages = new ListView<>();
+	private final TableView<ImageDetailRow> table = new TableView<>();
+	private final ListView<String> listAssociatedImages = new ListView<>();
 
-	private Map<String, SimpleImageViewer> associatedImageViewers = new HashMap<>();
+	private final Map<String, SimpleImageViewer> associatedImageViewers = new HashMap<>();
 
 	private enum ImageDetailRow {
-		NAME, URI, PIXEL_TYPE, MAGNIFICATION, WIDTH, HEIGHT, DIMENSIONS,
-		PIXEL_WIDTH, PIXEL_HEIGHT, Z_SPACING, UNCOMPRESSED_SIZE, SERVER_TYPE, PYRAMID,
-		METADATA_CHANGED, IMAGE_TYPE,
-		STAIN_1, STAIN_2, STAIN_3, BACKGROUND, CPS_SCORE;
-	};
+		NAME("Name", "The image name"),
+		URI("URI(s)", "The uniform resource identifier of the image"),
+		PIXEL_TYPE("Pixel type", "The data type of the pixel values"),
+		MAGNIFICATION("Magnification", "The magnification at which the image was captured"),
+		WIDTH("Width", "The image width in pixels"),
+		HEIGHT("Height", "The image height in pixels"),
+		DIMENSIONS("Dimensions (CZT)", "The number of channels, Z-slices, and time points present in the image, respectively"),
+		PIXEL_WIDTH("Pixel width", "The width of each pixel in physical space"),
+		PIXEL_HEIGHT("Pixel height", "The height of each pixel in physical space"),
+		Z_SPACING("Z spacing", "The spacing of Z-slices in physical space"),
+		UNCOMPRESSED_SIZE("Uncompressed size", "The total size of the full resolution image without any compression"),
+		SERVER_TYPE("Server type", "The type of ImageServer used to retrieve pixel values"),
+		PYRAMID("Pyramid", "The pyramidal zoom levels available in the image (if any)"),
+		METADATA_CHANGED("Metadata changed", "Has the original metadata been changed in QuPath?"),
+		IMAGE_TYPE("Image type", "The image type setting used in QuPath"),
+		STAIN_1("Stain 1", "The first stain used for color deconvolution"),
+		STAIN_2("Stain 2", "The second stain used for color deconvolution"),
+		STAIN_3("Stain 3", "The third stain used for color deconvolution"),
+		BACKGROUND("Background", "The pixel values used as background for color deconvolution");
 
-	private static List<ImageDetailRow> brightfieldRows;
-	private static List<ImageDetailRow> otherRows;
-	
+		private final String name;
+		private final String description;
+		static final Set<ImageDetailRow> doubleClickable = Set.of(MAGNIFICATION, PIXEL_WIDTH, PIXEL_HEIGHT, Z_SPACING, IMAGE_TYPE, STAIN_1, STAIN_2, STAIN_3, BACKGROUND);
+
+		public boolean isDoubleClickable() {
+			return doubleClickable.contains(this);
+		}
+
+		public String getName() {
+			return name;
+		}
+
+		public String getDescription() {
+			return description;
+		}
+
+		ImageDetailRow(String name, String description) {
+			this.name = name;
+			this.description = description;
+		}
+
+	}
+
+	private static final List<ImageDetailRow> brightfieldRows;
+	private static final List<ImageDetailRow> otherRows;
+
 	static {
 		brightfieldRows = Arrays.asList(ImageDetailRow.values());
 		otherRows = new ArrayList<>(brightfieldRows);
@@ -158,8 +192,8 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 	}
 
 	/**
-	 * Constructor.
-	 * @param imageDataProperty 
+	 * Create an instance of the class.
+	 * @param imageDataProperty the image data to be represented
 	 */
 	public ImageDetailsPane(final ObservableValue<ImageData<BufferedImage>> imageDataProperty) {
 		imageDataProperty.addListener(this);
@@ -174,7 +208,7 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		columnName.setCellValueFactory(v -> new ReadOnlyStringWrapper(v.getValue().getName()));
 		columnName.setEditable(false);
 		columnName.setPrefWidth(150);
-        columnName.setCellFactory(_ -> new ImageDetailNameTableCell());
+		columnName.setCellFactory(_ -> new ImageDetailNameTableCell());
 		TableColumn<ImageDetailRow, Object> columnValue = new TableColumn<>("Value");
 		columnValue.setCellValueFactory(v -> new ReadOnlyObjectWrapper<>(getValue(v.getValue())));
 		columnValue.setEditable(false);
@@ -201,9 +235,9 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 						listAssociatedImages.getItems()));
 		pane.getChildren().add(mdPane);
 	}
-	
-	
-	
+
+
+
 	private void handleAssociatedImagesMouseClick(MouseEvent event) {
 		if (event.getClickCount() < 2 || listAssociatedImages.getSelectionModel().getSelectedItem() == null)
 			return;
@@ -281,7 +315,7 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		// Use line or area ROI if possible
 		if (!requestZSpacing && roi != null && !roi.isEmpty() && (roi.isArea() || roi.isLine())) {
 			boolean setPixelHeight = true;
-			boolean setPixelWidth = true;	
+			boolean setPixelWidth = true;
 			String message;
 			String units = GeneralTools.micrometerSymbol();
 
@@ -396,21 +430,21 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 					createImageTypeButton(ImageType.BRIGHTFIELD_H_E, "Brightfield\nH&E",
 							createImageTypeCell(Color.WHITE, Color.PINK, Color.DARKBLUE, size),
 							"Brightfield image with hematoylin & eosin stains\n(8-bit RGB only)", isRGB)
-					);
+			);
 
 			buttonMap.put(
 					ImageType.BRIGHTFIELD_H_DAB,
 					createImageTypeButton(ImageType.BRIGHTFIELD_H_DAB, "Brightfield\nH-DAB",
 							createImageTypeCell(Color.WHITE, Color.rgb(200, 200, 220), Color.rgb(120, 50, 20), size),
 							"Brightfield image with hematoylin & DAB stains\n(8-bit RGB only)", isRGB)
-					);
+			);
 
 			buttonMap.put(
 					ImageType.BRIGHTFIELD_OTHER,
 					createImageTypeButton(ImageType.BRIGHTFIELD_OTHER, "Brightfield\nOther",
 							createImageTypeCell(Color.WHITE, Color.ORANGE, Color.FIREBRICK, size),
 							"Brightfield image with other chromogenic stains\n(8-bit RGB only)", isRGB)
-					);
+			);
 		}
 
 		buttonMap.put(
@@ -419,21 +453,21 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 						createImageTypeCell(Color.BLACK, Color.LIGHTGREEN, Color.BLUE, size),
 						"Fluorescence or fluorescence-like image with a dark background\n" +
 								"Also suitable for imaging mass cytometry", true)
-				);
+		);
 
 		buttonMap.put(
 				ImageType.OTHER,
 				createImageTypeButton(ImageType.OTHER, "Other",
 						createImageTypeCell(Color.BLACK, Color.WHITE, Color.GRAY, size),
 						"Any other image type", true)
-				);
+		);
 
 		buttonMap.put(
 				ImageType.UNSET,
 				createImageTypeButton(ImageType.UNSET, "Unspecified",
 						iconUnspecified,
 						"Do not set the image type (not recommended for analysis)", true)
-				);
+		);
 
 		var buttons = buttonMap.values().toArray(ToggleButton[]::new);
 		for (var btn: buttons) {
@@ -458,13 +492,13 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		var grid = new GridPane();
 		int nHorizontal = 3;
 		int nVertical = (int)Math.ceil(buttons.length / (double)nHorizontal);
-		grid.getColumnConstraints().setAll(IntStream.range(0, nHorizontal).mapToObj(i -> {
+		grid.getColumnConstraints().setAll(IntStream.range(0, nHorizontal).mapToObj(_ -> {
 			var c = new ColumnConstraints();
 			c.setPercentWidth(100.0/nHorizontal);
 			return c;
 		}).toList());
 
-		grid.getRowConstraints().setAll(IntStream.range(0, nVertical).mapToObj(i -> {
+		grid.getRowConstraints().setAll(IntStream.range(0, nVertical).mapToObj(_ -> {
 			var c = new RowConstraints();
 			c.setPercentHeight(100.0/nVertical);
 			return c;
@@ -486,9 +520,9 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 				ImageTypeSetting.AUTO_ESTIMATE, "Always auto-estimate type (don't prompt)",
 				ImageTypeSetting.PROMPT, "Always prompt me to set type",
 				ImageTypeSetting.NONE, "Don't set the image type"
-				);
+		);
 		comboOptions.setButtonCell(FXUtils.createCustomListCell(p -> prompts.get(p)));
-		comboOptions.setCellFactory(c -> FXUtils.createCustomListCell(p -> prompts.get(p)));
+		comboOptions.setCellFactory(_ -> FXUtils.createCustomListCell(p -> prompts.get(p)));
 		comboOptions.setTooltip(
 				new Tooltip("Choose whether you want to see these prompts " +
 						"when opening an image for the first time"));
@@ -529,7 +563,7 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 			btn.setOnMouseClicked(e -> {
 				if (!btn.isDisabled() && e.getClickCount() == 2) {
 					btnApply.fireEvent(new ActionEvent());
-					e.consume();					
+					e.consume();
 				}
 			});
 		}
@@ -658,12 +692,12 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		table.getItems().setAll(getRows());
 		table.refresh();
 
-        if (server == null)
-            listAssociatedImages.getItems().clear();
-        else
-            listAssociatedImages.getItems().setAll(server.getAssociatedImageList());
+		if (server == null)
+			listAssociatedImages.getItems().clear();
+		else
+			listAssociatedImages.getItems().setAll(server.getAssociatedImageList());
 
-        // Check if we're showing associated images
+		// Check if we're showing associated images
 		for (var entry : associatedImageViewers.entrySet()) {
 			var name = entry.getKey();
 			var simpleViewer = entry.getValue();
@@ -701,109 +735,6 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		return list;
 	}
 
-	private String getName(ImageDetailRow row) {
-		switch (row) {
-		case NAME:
-			return "Name";
-		case URI:
-			if (imageData != null && imageData.getServer().getURIs().size() == 1)
-				return "URI";
-			return "URIs";
-		case IMAGE_TYPE:
-			return "Image type";
-		case METADATA_CHANGED:
-			return "Metadata changed";
-		case PIXEL_TYPE:
-			return "Pixel type";
-		case MAGNIFICATION:
-			return "Magnification";
-		case WIDTH:
-			return "Width";
-		case HEIGHT:
-			return "Height";
-		case DIMENSIONS:
-			return "Dimensions (CZT)";
-		case PIXEL_WIDTH:
-			return "Pixel width";
-		case PIXEL_HEIGHT:
-			return "Pixel height";
-		case Z_SPACING:
-			return "Z-spacing";
-		case UNCOMPRESSED_SIZE:
-			return "Uncompressed size";
-		case SERVER_TYPE:
-			return "Server type";
-		case PYRAMID:
-			return "Pyramid";
-		case STAIN_1:
-			return "Stain 1";
-		case STAIN_2:
-			return "Stain 2";
-		case STAIN_3:
-			return "Stain 3";
-		case BACKGROUND:
-			return "Background";
-		default:
-			return null;
-		}
-	}
-
-	private static final String KEY_PDL1_CPS = "PDL1_CPS";
-
-	private static ProjectImageEntry<BufferedImage> getEntry(ImageData<BufferedImage> imageData) {
-		if (imageData == null)
-			return null;
-
-		// Prefer current GUI instance if available, but don’t assume it exists
-		var qupath = QuPathGUI.getInstance();
-		var project = qupath == null ? null : qupath.getProject();
-		return project == null ? null : project.getEntry(imageData);
-	}
-
-	private static Integer getCpsScore(ImageData<BufferedImage> imageData) {
-		var entry = getEntry(imageData);
-		if (entry == null)
-			return null;
-
-		var md = entry.getMetadata();
-		if (md == null)
-			return null;
-
-		String v = md.get(KEY_PDL1_CPS);
-		if (v == null || v.isBlank())
-			return null;
-
-		try {
-			return Integer.parseInt(v.trim());
-		} catch (Exception e) {
-			return null;
-		}
-	}
-
-	private static boolean setCpsScore(ImageData<BufferedImage> imageData, Integer cps) {
-		var entry = getEntry(imageData);
-		if (entry == null) {
-			Dialogs.showErrorMessage("Set CPS score",
-					"No project entry found.\nAdd the image to a project to store CPS.");
-			return false;
-		}
-
-		var md = entry.getMetadata();
-		if (md == null) {
-			Dialogs.showErrorMessage("Set CPS score",
-					"Project metadata is not available for this entry.");
-			return false;
-		}
-
-		if (cps == null)
-			md.remove(KEY_PDL1_CPS);
-		else
-			md.put(KEY_PDL1_CPS, Integer.toString(cps));
-
-		return true;
-	}
-
-
 
 	private static String decodeURI(URI uri) {
 		try {
@@ -819,100 +750,119 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		ImageServer<BufferedImage> server = imageData.getServer();
 		PixelCalibration cal = server.getPixelCalibration();
 		switch (rowType) {
-		case NAME:
-			var project = QuPathGUI.getInstance().getProject();
-			var entry = project == null ? null : project.getEntry(imageData);
-			if (entry == null)
-				return ServerTools.getDisplayableImageName(server);
-			else
-				return entry.getImageName();
-		case URI:
-			Collection<URI> uris = server.getURIs();
-			if (uris.isEmpty())
-				return "Not available";
-			if (uris.size() == 1)
-				return decodeURI(uris.iterator().next());
-			return "[" + String.join(", ", uris.stream().map(ImageDetailsPane::decodeURI).toList()) + "]";
-		case IMAGE_TYPE:
-			return imageData.getImageType();
-		case METADATA_CHANGED:
-			return hasOriginalMetadata(imageData.getServer()) ? "No" : "Yes";
-		case PIXEL_TYPE:
-			String type = server.getPixelType().toString().toLowerCase();
-			if (server.isRGB())
-				type += " (rgb)";
-			return type;
-		case MAGNIFICATION:
-			double mag = server.getMetadata().getMagnification();
-			if (Double.isNaN(mag))
-				return "Unknown";
-			return mag;
-		case WIDTH:
-			if (cal.hasPixelSizeMicrons())
-				return String.format("%s px (%.2f %s)", server.getWidth(), server.getWidth() * cal.getPixelWidthMicrons(), GeneralTools.micrometerSymbol());
-			else
-				return String.format("%s px", server.getWidth());
-		case HEIGHT:
-			if (cal.hasPixelSizeMicrons())
-				return String.format("%s px (%.2f %s)", server.getHeight(), server.getHeight() * cal.getPixelHeightMicrons(), GeneralTools.micrometerSymbol());
-			else
-				return String.format("%s px", server.getHeight());
-		case DIMENSIONS:
-			return String.format("%d x %d x %d", server.nChannels(), server.nZSlices(), server.nTimepoints());
-		case PIXEL_WIDTH:
-			if (cal.hasPixelSizeMicrons())
-				return String.format("%.4f %s", cal.getPixelWidthMicrons(), GeneralTools.micrometerSymbol());
-			else
-				return "Unknown";
-		case PIXEL_HEIGHT:
-			if (cal.hasPixelSizeMicrons())
-				return String.format("%.4f %s", cal.getPixelHeightMicrons(), GeneralTools.micrometerSymbol());
-			else
-				return "Unknown";
-		case Z_SPACING:
-			if (cal.hasZSpacingMicrons())
-				return String.format("%.4f %s", cal.getZSpacingMicrons(), GeneralTools.micrometerSymbol());
-			else
-				return "Unknown";
-		case UNCOMPRESSED_SIZE:
-			double size =
-			server.getWidth()/1024.0 * server.getHeight()/1024.0 * 
-			server.getPixelType().getBytesPerPixel() * server.nChannels() *
-			server.nZSlices() * server.nTimepoints();
-			String units = " MB";
-			if (size > 1000) {
-				size /= 1024.0;
-				units = " GB";
-			}
-			return GeneralTools.formatNumber(size, 1) + units;
-		case SERVER_TYPE:
-			return server.getServerType();
-		case PYRAMID:
-			if (server.nResolutions() == 1)
-				return "No";
-			return GeneralTools.arrayToString(Locale.getDefault(Locale.Category.FORMAT), server.getPreferredDownsamples(), 1);
-		case STAIN_1:
-			return imageData.getColorDeconvolutionStains().getStain(1);
-		case STAIN_2:
-			return imageData.getColorDeconvolutionStains().getStain(2);
-		case STAIN_3:
-			return imageData.getColorDeconvolutionStains().getStain(3);
-		case BACKGROUND:
-			ColorDeconvolutionStains stains = imageData.getColorDeconvolutionStains();
-			double[] whitespace = new double[]{stains.getMaxRed(), stains.getMaxGreen(), stains.getMaxBlue()};
-			return whitespace;
-		default:
-			return null;
+			case NAME:
+				var project = QuPathGUI.getInstance().getProject();
+				var entry = project == null ? null : project.getEntry(imageData);
+				if (entry == null)
+					return ServerTools.getDisplayableImageName(server);
+				else
+					return entry.getImageName();
+			case URI:
+				Collection<URI> uris = server.getURIs();
+				if (uris.isEmpty())
+					return "Not available";
+				if (uris.size() == 1)
+					return decodeURI(uris.iterator().next());
+				return "[" + String.join(", ", uris.stream().map(ImageDetailsPane::decodeURI).toList()) + "]";
+			case IMAGE_TYPE:
+				return imageData.getImageType();
+			case METADATA_CHANGED:
+				return hasOriginalMetadata(imageData.getServer()) ? "No" : "Yes";
+			case PIXEL_TYPE:
+				String type = server.getPixelType().toString().toLowerCase();
+				if (server.isRGB())
+					type += " (rgb)";
+				return type;
+			case MAGNIFICATION:
+				double mag = server.getMetadata().getMagnification();
+				if (Double.isNaN(mag))
+					return "Unknown";
+				return mag;
+			case WIDTH:
+				if (cal.hasPixelSizeMicrons())
+					return String.format("%s px (%.2f %s)", server.getWidth(), server.getWidth() * cal.getPixelWidthMicrons(), GeneralTools.micrometerSymbol());
+				else
+					return String.format("%s px", server.getWidth());
+			case HEIGHT:
+				if (cal.hasPixelSizeMicrons())
+					return String.format("%s px (%.2f %s)", server.getHeight(), server.getHeight() * cal.getPixelHeightMicrons(), GeneralTools.micrometerSymbol());
+				else
+					return String.format("%s px", server.getHeight());
+			case DIMENSIONS:
+				return String.format("%d x %d x %d", server.nChannels(), server.nZSlices(), server.nTimepoints());
+			case PIXEL_WIDTH:
+				if (cal.hasPixelSizeMicrons())
+					return String.format("%.4f %s", cal.getPixelWidthMicrons(), GeneralTools.micrometerSymbol());
+				else
+					return "Unknown";
+			case PIXEL_HEIGHT:
+				if (cal.hasPixelSizeMicrons())
+					return String.format("%.4f %s", cal.getPixelHeightMicrons(), GeneralTools.micrometerSymbol());
+				else
+					return "Unknown";
+			case Z_SPACING:
+				if (cal.hasZSpacingMicrons())
+					return String.format("%.4f %s", cal.getZSpacingMicrons(), GeneralTools.micrometerSymbol());
+				else
+					return "Unknown";
+			case UNCOMPRESSED_SIZE:
+				double size =
+						server.getWidth()/1024.0 * server.getHeight()/1024.0 *
+								server.getPixelType().getBytesPerPixel() * server.nChannels() *
+								server.nZSlices() * server.nTimepoints();
+				String units = " MB";
+				if (size > 1000) {
+					size /= 1024.0;
+					units = " GB";
+				}
+				return GeneralTools.formatNumber(size, 1) + units;
+			case SERVER_TYPE:
+				return server.getServerType();
+			case PYRAMID:
+				if (server.nResolutions() == 1)
+					return "No";
+				return GeneralTools.arrayToString(Locale.getDefault(Locale.Category.FORMAT), server.getPreferredDownsamples(), 1);
+			case STAIN_1:
+				return imageData.getColorDeconvolutionStains().getStain(1);
+			case STAIN_2:
+				return imageData.getColorDeconvolutionStains().getStain(2);
+			case STAIN_3:
+				return imageData.getColorDeconvolutionStains().getStain(3);
+			case BACKGROUND:
+				ColorDeconvolutionStains stains = imageData.getColorDeconvolutionStains();
+				return new double[]{stains.getMaxRed(), stains.getMaxGreen(), stains.getMaxBlue()};
+			default:
+				return null;
 		}
 
 	}
-	
-	
-	private static class ImageDetailTableCell extends TableCell<ImageDetailRow, Object> {
-		
+
+	private static class ImageDetailNameTableCell extends TableCell<ImageDetailRow, String> {
+		@Override
+		protected void updateItem(String item, boolean empty) {
+			super.updateItem(item, empty);
+			if (empty) {
+				setText(null);
+				setGraphic(null);
+				return;
+			}
+			var imageDetailRow = getTableRow().getItem();
+			setText(imageDetailRow.getName());
+			String toolTipText = imageDetailRow.getDescription();
+			if (imageDetailRow.isDoubleClickable()) {
+				toolTipText += " (double-click value field to edit)";
+			} else if (imageDetailRow == ImageDetailRow.METADATA_CHANGED) {
+				toolTipText += " (double-click value field to reset original metadata)";
+			}
+			setTooltip(new Tooltip(toolTipText));
+		}
+	}
+
+	private static class ImageDetailValueTableCell extends TableCell<ImageDetailRow, Object> {
+
 		private ObservableValue<ImageData<BufferedImage>> imageDataProperty;
 
-		ImageDetailTableCell(ObservableValue<ImageData<BufferedImage>> imageDataProperty) {
+		ImageDetailValueTableCell(ObservableValue<ImageData<BufferedImage>> imageDataProperty) {
 			this.imageDataProperty = imageDataProperty;
 			setOnMouseClicked(this::handleMouseClick);
 		}
@@ -934,73 +884,25 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 				text = GeneralTools.arrayToString(Locale.getDefault(Category.FORMAT), (double[])item, 2);
 				tooltipText = "Double-click to set background values for color deconvolution (either type values or use a small rectangle ROI in the image)";
 			} else if (item instanceof StainVector stain) {
-                Integer color = stain.getColor();
+				Integer color = stain.getColor();
 				style = String.format("-fx-text-fill: rgb(%d, %d, %d);", ColorTools.red(color), ColorTools.green(color), ColorTools.blue(color));
 				tooltipText = "Double-click to set stain color (either type values or use a small rectangle ROI in the image)";
 			} else {
 				var type = getTableRow().getItem();
-				if (type != null) {
-					if (type.equals(ImageDetailRow.PIXEL_WIDTH) || type.equals(ImageDetailRow.PIXEL_HEIGHT) || type.equals(ImageDetailRow.Z_SPACING)) {
-						if ("Unknown".equals(item))
-							style = "-fx-text-fill: red;";
-						tooltipText = "Double-click to set pixel calibration (can use a selected line or area ROI in the image)";
-					} else if (type.equals(ImageDetailRow.METADATA_CHANGED))
-						tooltipText = "Double-click to reset original metadata";
-					else if (type.equals(ImageDetailRow.UNCOMPRESSED_SIZE))
-						tooltipText = "Approximate memory required to store all pixels in the image uncompressed";
-					else if (type.equals(ImageDetailRow.CPS_SCORE)) {
-						tooltipText = "Double-click to set CPS score (0–100)";
-					}
-
-				}
+				if (type.equals(ImageDetailRow.PIXEL_WIDTH) || type.equals(ImageDetailRow.PIXEL_HEIGHT) || type.equals(ImageDetailRow.Z_SPACING)) {
+					if ("Unknown".equals(item))
+						style = "-fx-text-fill: red;";
+					tooltipText = "Double-click to set pixel calibration (can use a selected line or area ROI in the image)";
+				} else if (type.equals(ImageDetailRow.METADATA_CHANGED))
+					tooltipText = "Double-click to reset original metadata";
+				else if (type.equals(ImageDetailRow.UNCOMPRESSED_SIZE))
+					tooltipText = "Approximate memory required to store all pixels in the image uncompressed";
+				else if (type.isDoubleClickable())
+					tooltipText += " (double-click to edit)";
 			}
 			setStyle(style);
 			setText(text);
 			setTooltip(new Tooltip(tooltipText));
-		}
-
-		private static boolean promptToSetCpsScore(ImageData<BufferedImage> imageData) {
-			Integer current = getCpsScore(imageData);
-			String defaultValue = current == null ? "" : current.toString();
-
-			var params = new ParameterList()
-					.addStringParameter("cps", "CPS score", defaultValue,
-							"Enter CPS score (0–100). Leave blank to clear.");
-
-			var panel = new ParameterPanelFX(params);
-			if (!Dialogs.showConfirmDialog("Set CPS score", panel.getPane()))
-				return false;
-
-			String text = params.getStringParameterValue("cps");
-			if (text == null)
-				return false;
-
-			text = text.trim();
-			if (text.isEmpty()) {
-				if (current == null)
-					return false;
-				setCpsScore(imageData, null);
-				return true;
-			}
-
-			int cps;
-			try {
-				cps = Integer.parseInt(text);
-			} catch (NumberFormatException e) {
-				Dialogs.showErrorMessage("Set CPS score", "CPS must be an integer (0–100).");
-				return false;
-			}
-
-			if (cps < 0 || cps > 100) {
-				Dialogs.showErrorMessage("Set CPS score", "CPS must be in the range 0–100.");
-				return false;
-			}
-
-			if (current != null && current == cps)
-				return false;
-
-			setCpsScore(imageData, cps);
-			return true;
 		}
 
 		private void handleMouseClick(MouseEvent event) {
@@ -1028,39 +930,31 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 						metadataChanged = promptToResetServerMetadata(imageData);
 					}
 				}
-				else if (type == ImageDetailRow.CPS_SCORE) {
-					boolean changed = promptToSetCpsScore(imageData);
-					if (changed) {
-						c.getTableView().refresh();
-						imageData.getHierarchy().fireHierarchyChangedEvent(this);
-					}
-					return;
-				}
 				if (metadataChanged) {
 					c.getTableView().refresh();
 					imageData.getHierarchy().fireHierarchyChangedEvent(this);
 				}
 			}
 		}
-		
-		
+
+
 		private static void editStainVector(ImageData<BufferedImage> imageData, Object value) {
 			if (imageData == null || !(value instanceof StainVector || value instanceof double[]))
 				return;
-			
+
 			ColorDeconvolutionStains stains = imageData.getColorDeconvolutionStains();
 			int num = -1; // Default to background values
 			String name = null;
 			String message = null;
 			if (value instanceof StainVector stainVector) {
 
-                if (stainVector.isResidual() && imageData.getImageType() != ImageType.BRIGHTFIELD_OTHER) {
+				if (stainVector.isResidual() && imageData.getImageType() != ImageType.BRIGHTFIELD_OTHER) {
 					logger.warn("Cannot set residual stain vector - this is computed from the known vectors");
 					return;
 				}
 				num = stains.getStainNumber(stainVector);
 				if (num <= 0) {
-                    logger.error("Could not identify stain vector {} inside {}", stainVector, stains);
+					logger.error("Could not identify stain vector {} inside {}", stainVector, stains);
 					return;
 				}
 				name = stainVector.getName();
@@ -1073,7 +967,7 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 			String warningMessage = null;
 			boolean editableName = imageData.getImageType() == ImageType.BRIGHTFIELD_OTHER;
 			if (roi != null) {
-				if ((roi instanceof RectangleROI) && 
+				if ((roi instanceof RectangleROI) &&
 						!roi.isEmpty() &&
 						roi.getArea() < 500*500) {
 					if (Dialogs.showYesNoDialog("Color deconvolution stains", message)) {
@@ -1130,7 +1024,7 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 				nameBefore = ((StainVector)value).getName();
 				valuesBefore = ((StainVector)value).arrayAsString(Locale.getDefault(Category.FORMAT));
 				params.addStringParameter("name", "Name", nameBefore, "Enter stain name")
-				.addStringParameter("values", "Values", valuesBefore, "Enter 3 values (red, green, blue) defining color deconvolution stain vector, separated by spaces");
+						.addStringParameter("values", "Values", valuesBefore, "Enter 3 values (red, green, blue) defining color deconvolution stain vector, separated by spaces");
 				title = "Set stain vector";
 			} else {
 				nameBefore = "Background";
@@ -1170,7 +1064,7 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 
 			if (num >= 0) {
 				try {
-					stains = stains.changeStain(StainVector.createStainVector(nameAfter, valuesParsed[0], valuesParsed[1], valuesParsed[2]), num);					
+					stains = stains.changeStain(StainVector.createStainVector(nameAfter, valuesParsed[0], valuesParsed[1], valuesParsed[2]), num);
 				} catch (Exception e) {
 					logger.error("Error setting stain vectors", e);
 					Dialogs.showErrorMessage("Set stain vectors", "Requested stain vectors are not valid!\nAre two stains equal?");
@@ -1186,6 +1080,6 @@ public class ImageDetailsPane implements ChangeListener<ImageData<BufferedImage>
 		}
 
 	}
-	
+
 
 }
