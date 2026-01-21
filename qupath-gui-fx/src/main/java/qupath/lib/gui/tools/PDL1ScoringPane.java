@@ -109,7 +109,7 @@ public class PDL1ScoringPane extends VBox {
         // 3️⃣ Export one row (reads CPS + elapsed time + counts)
         PDL1Export.appendRow(
                 imageData,
-                PDL1Tools.PDL1Keys.USERNAME,
+                PDL1Tools.getCurrentUser(),
                 cps,
                 PDL1Tools.getLastDenomTumor(),
                 PDL1Tools.getLastNuclei(),

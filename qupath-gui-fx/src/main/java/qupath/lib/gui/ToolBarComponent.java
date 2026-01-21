@@ -164,13 +164,23 @@ class ToolBarComponent {
 			}
 
 			// Keep types consistent with your other code
-			@SuppressWarnings("unchecked")
 			ImageData<BufferedImage> imageData = (ImageData<BufferedImage>) viewer.getImageData();
 
 			var qupath = QuPathGUI.getInstance();
 			var mgr = qupath.getMainPaneManager(); // may be null early in startup; guard below
 
 			if (Boolean.TRUE.equals(is)) {
+
+				// 0) Consent + participant name
+				String user = PDL1Tools.promptForUserWithPrivacy();
+				if (user == null) {
+					// User declined -> revert toggle OFF
+					toggleGuard.set(true);
+					try { btnPdl1.setSelected(false); }
+					finally { toggleGuard.set(false); }
+					return;
+				}
+				PDL1Tools.setCurrentUser(user); // used by exporter later
 
 				PDL1Timer.start(imageData);
 				PDL1Tools.startViewportCounter(viewer);
@@ -181,7 +191,6 @@ class ToolBarComponent {
 
 				// 🔍 Force magnification to 20x
 				Platform.runLater(() -> {
-
 					PDL1Tools.magnify_viewer(viewer)	;
 				});
 				// Swap button to timer state
@@ -227,8 +236,6 @@ class ToolBarComponent {
 				btnPdl1.setGraphic(pdl1Icon);
 				btnPdl1.setTooltip(new Tooltip("Start PD-L1 scoring"));
 			}
-
-
 	});
 
 		nodes.add(createSeparator());

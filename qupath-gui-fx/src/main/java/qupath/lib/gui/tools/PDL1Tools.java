@@ -31,7 +31,7 @@ public class PDL1Tools {
     private static final ScheduledExecutorService PDL1_EXEC =
             Executors.newSingleThreadScheduledExecutor(r -> { var t=new Thread(r,"PDL1-view"); t.setDaemon(true); return t; });
 
-    private static volatile String CURRENT_USER = "";
+    private static volatile String CURRENT_USER = "DEFAULT USER";
     private static ScheduledFuture<?> viewFuture;
 
     public static void magnify_viewer(QuPathViewer viewer) {
@@ -56,14 +56,20 @@ public class PDL1Tools {
         viewer.setCenterPixelLocation(cx, cy);
     }
 
+    public static String getCurrentUser() {
+        return CURRENT_USER;
+    }
+
+    public static void setCurrentUser(String currentUser) {
+        CURRENT_USER = currentUser;
+    }
+
 
     public static final class PDL1Keys {
         public static final String TIMER_START_MS   = "PDL1_TIMER_START_MS";
         public static final String TIMER_ELAPSED_MS = "PDL1_TIMER_ELAPSED_MS";
         public static final String TIMER_STOP_MS    = "PDL1_TIMER_STOP_MS";
         public static final String CPS_SCORE        = "PDL1_CPS";
-        public static final String USERNAME = "Default User";
-
         private PDL1Keys() {}
     }
 
@@ -175,7 +181,7 @@ public class PDL1Tools {
         var stack = findStackPane(viewNode);
         if (stack == null) return;
 
-        HUD = new Label("");
+        HUD = new Label("CPS Thresholds");
         HUD.setMouseTransparent(true);
         HUD.setStyle("""
         -fx-background-color: rgba(0,0,0,0.6);
@@ -327,7 +333,7 @@ public class PDL1Tools {
         String n = name.toLowerCase().trim();
 
         // Ignore "non-tumor" cases first
-        if (n.contains("immune") || n.contains("stroma") || n.contains("nontumor"))
+        if (n.contains("immune") || n.contains("stroma") || n.contains("necrosis") || n.contains("other"))
             return false;
 
         // Check if it contains any tumor-related keywords
@@ -340,6 +346,7 @@ public class PDL1Tools {
         String n = s.toLowerCase();
         return n.contains("immune");
     }
+
     /*/
     Function to count PD-L1 events in the view
      */
@@ -380,7 +387,6 @@ public class PDL1Tools {
         final int rx = region.getX(), ry = region.getY(), rw = region.getWidth(), rh = region.getHeight();
 
         for (PathObject obj : objs) {
-            // If your API returns PathObject, guard/cast:
 //            if (!(det instanceof qupath.lib.objects.PathDetectionObject d)) continue;
 
             if (!(obj instanceof PathDetectionObject)) continue;
@@ -467,4 +473,53 @@ public class PDL1Tools {
         );
         return !Double.isNaN(v) && v > 0.15; // tune threshold to your assay
     }
+
+    public static String promptForUserWithPrivacy() {
+
+        // ---- Step 1: Privacy notice ----
+        Alert notice = new Alert(Alert.AlertType.CONFIRMATION);
+        notice.setTitle("PD-L1 Scoring – Privacy notice");
+        notice.setHeaderText("Participant data will be recorded");
+        notice.setGraphic(null);
+
+        notice.setContentText(
+                "This PD-L1 scoring tool records:\n" +
+                        "• Your name (as entered)\n" +
+                        "• Slide/image name\n" +
+                        "• CPS score\n" +
+                        "• Counts (tumor denominator, nuclei)\n" +
+                        "• Start/stop time and elapsed time\n\n" +
+                        "This data is used for research/quality evaluation of scoring performance.\n" +
+                        "Data is saved locally to the project’s output log (CSV).\n\n" +
+                        "By clicking Next, you consent to this collection."
+        );
+
+        ButtonType next = new ButtonType("Next", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
+        notice.getButtonTypes().setAll(next, cancel);
+
+        var choice = notice.showAndWait();
+        if (choice.isEmpty() || choice.get() != next)
+            return null; // user declined
+
+        // ---- Step 2: Ask for name ----
+        TextInputDialog nameDlg = new TextInputDialog(getCurrentUser());
+        nameDlg.setTitle("Participant name");
+        nameDlg.setHeaderText(null);
+        nameDlg.setGraphic(null);
+        nameDlg.setContentText("Enter your name:");
+
+        var res = nameDlg.showAndWait();
+        if (res.isEmpty())
+            return null;
+
+        String name = res.get().trim();
+        if (name.isBlank()) {
+            Dialogs.showErrorMessage("PD-L1", "Name is required to proceed.");
+            return null;
+        }
+
+        return name;
+    }
+
 }
