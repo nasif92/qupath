@@ -26,7 +26,7 @@ public final class PDL1Export {
 
     public static void appendRow(ImageData<BufferedImage> imageData,
                                  String user,
-                                 int cps,
+                                 Float cps,
                                  int denomTumor,
                                  int nuclei,
                                  boolean toolMode) {
@@ -85,7 +85,7 @@ public final class PDL1Export {
                     csv(slideName),
                     csv(user),
                     csv(toolMode ? "TOOL" : "NON_TOOL"),
-                    csv(Integer.toString(cps)),
+                    csv(Float.toString(cps)),
                     csv(Integer.toString(denomTumor)),
                     csv(Integer.toString(nuclei)),
                     csv(elapsedMsOut),

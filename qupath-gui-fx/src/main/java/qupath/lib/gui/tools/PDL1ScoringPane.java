@@ -65,8 +65,8 @@ public class PDL1ScoringPane extends VBox {
     public void bindTo(ImageData<BufferedImage> imageData) {
         this.imageData = imageData;
         // preload CPS if you store it in project metadata
-        Integer cps = PDL1Tools.readCpsFromProjectMetadata(imageData);
-        cpsField.setText(cps == null ? "" : cps.toString());
+        Float cps = PDL1Tools.readCpsFromProjectMetadata(imageData);
+        cpsField.setText(cps == null ? "" : Float.toString(cps));
     }
 
     /** Called periodically from PDL1Tools on FX thread */
@@ -95,9 +95,11 @@ public class PDL1ScoringPane extends VBox {
         if (imageData == null)
             return;
 
-        Integer cps = parseCpsOrNull();
-        if (cps == null)
+        Float cpsInt = parseCpsOrNull();
+        if (cpsInt == null)
             return;
+
+        float cps = cpsInt;
 
         // 1️⃣ Stop timer (writes elapsed time into project metadata)
         PDL1Timer.stop(imageData);
@@ -148,17 +150,17 @@ public class PDL1ScoringPane extends VBox {
         }
     }
 
-    private Integer parseCpsOrNull() {
+    private Float parseCpsOrNull() {
         String txt = cpsField.getText() == null ? "" : cpsField.getText().trim();
         if (txt.isEmpty()) {
             Dialogs.showErrorMessage("PD-L1", "Please enter a CPS score (0–100).");
             return null;
         }
-        int cps;
+        float cps;
         try {
-            cps = Integer.parseInt(txt);
+            cps = Float.parseFloat(txt);
         } catch (Exception e) {
-            Dialogs.showErrorMessage("PD-L1", "CPS must be an integer (0–100).");
+            Dialogs.showErrorMessage("PD-L1", "CPS must be a number (0–100).");
             return null;
         }
         if (cps < 0 || cps > 100) {

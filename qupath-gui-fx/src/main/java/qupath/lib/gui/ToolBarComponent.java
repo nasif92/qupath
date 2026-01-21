@@ -132,6 +132,8 @@ class ToolBarComponent {
 		toolIdx = nodes.size();
 
 		addToolButtons(nodes, availableTools);
+
+		// PDL1 button
 		var btnPdl1 = new javafx.scene.control.ToggleButton();
 		btnPdl1.setId("pdl1Button");
 		btnPdl1.setTooltip(new javafx.scene.control.Tooltip("Count PD-L1 events in the view"));
@@ -140,10 +142,9 @@ class ToolBarComponent {
 		// initial icon for pdl1
 		btnPdl1.setGraphic(pdl1Icon);
 
-		// TIMING icon
+		// TIMING icon after clicked
 		Label timerIcon = new Label("\u23F1"); // ⏱
 		timerIcon.setStyle("-fx-font-size: 16px; -fx-padding: 0 2 0 2;");
-		var mainPaneManager = quPathGUI.getMainPaneManager();
 
 		// Avoid re-entrant loops when we programmatically flip the toggle
 		final java.util.concurrent.atomic.AtomicBoolean toggleGuard = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -164,7 +165,7 @@ class ToolBarComponent {
 			}
 
 			// Keep types consistent with your other code
-			ImageData<BufferedImage> imageData = (ImageData<BufferedImage>) viewer.getImageData();
+			ImageData<BufferedImage> imageData = viewer.getImageData();
 
 			var qupath = QuPathGUI.getInstance();
 			var mgr = qupath.getMainPaneManager(); // may be null early in startup; guard below
@@ -199,8 +200,8 @@ class ToolBarComponent {
 
 			} else {
 				// ---- FINISH scoring (prompt CPS) ----
-				Integer current = PDL1Tools.readCpsFromProjectMetadata(imageData);
-				Integer cps = PDL1Tools.promptForCpsScore(current);
+				Float current = PDL1Tools.readCpsFromProjectMetadata(imageData);
+				Float cps = PDL1Tools.promptForCpsScore(current);
 
 				if (cps == null) {
 					// Cancel finish -> keep scoring active, keep toggle ON

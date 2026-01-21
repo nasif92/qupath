@@ -26,6 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+
 public class PDL1Tools {
     // Debounce state for the box updater
     private static final ScheduledExecutorService PDL1_EXEC =
@@ -98,7 +99,7 @@ public class PDL1Tools {
 
     }
 
-    public static Integer promptForCpsScore(Integer current) {
+    public static Float promptForCpsScore(Float current) {
         TextInputDialog dlg = new TextInputDialog(current == null ? "" : current.toString());
         dlg.setTitle("Enter CPS score (0-100)");
         dlg.setHeaderText(null);          // ✅ removes header (and icon)
@@ -114,14 +115,14 @@ public class PDL1Tools {
             return null;
 
         try {
-            int cps = Integer.parseInt(txt);
+            float cps = Float.parseFloat(txt);
             if (cps < 0 || cps > 100) {
                 Dialogs.showErrorMessage("PD-L1", "CPS must be 0–100.");
                 return null;
             }
             return cps;
         } catch (Exception e) {
-            Dialogs.showErrorMessage("PD-L1", "CPS must be an integer.");
+            Dialogs.showErrorMessage("PD-L1", "CPS must be a number (0–100).");
             return null;
         }
     }
@@ -138,18 +139,20 @@ public class PDL1Tools {
     }
 
 
-    public static Integer readCpsFromProjectMetadata(ImageData<BufferedImage> imageData) {
+    public static Float readCpsFromProjectMetadata(ImageData<BufferedImage> imageData) {
         var entry = PDL1ProjectUtil.getEntry(imageData);
         if (entry == null) return null;
         var md = entry.getMetadata();
         if (md == null) return null;
         String v = md.get(PDL1Keys.CPS_SCORE);
         if (v == null) return null;
-        try { return Integer.parseInt(v.trim()); }
+        v = v.trim();
+        if (v.isEmpty() || v.equalsIgnoreCase("null")) return null;
+        try { return Float.parseFloat(v); }
         catch (Exception e) { return null; }
     }
 
-    public static boolean writeCpsToProjectMetadata(ImageData<BufferedImage> imageData, int cps) {
+    public static boolean writeCpsToProjectMetadata(ImageData<BufferedImage> imageData, Float cps) {
         var entry = PDL1ProjectUtil.getEntry(imageData);
         if (entry == null) {
             Dialogs.showErrorMessage("PD-L1", "Add the image to a project to store CPS.");
@@ -157,7 +160,7 @@ public class PDL1Tools {
         }
         var md = entry.getMetadata();
         if (md == null) return false;
-        md.put(PDL1Keys.CPS_SCORE, Integer.toString(cps));
+        md.put(PDL1Keys.CPS_SCORE, Float.toString(cps));
         return true;
     }
 
@@ -288,8 +291,9 @@ public class PDL1Tools {
             try {
                 int[] events = countNucleiInViewport(viewer);
                 // Defensive checks
-                int denomTumor = events.length > 0 ? events[0] : 0;
-                int nuclei     = events.length > 1 ? events[1] : 0;
+                int denomTumor = events.length > 0 ? events[0] : 0;  // tumor
+                int nuclei     = events.length > 1 ? events[1] : 0;  // total
+                int cpsScore   = events.length > 2 ? events[2] : 0;
 
                 LAST_DENOM_TUMOR.set(denomTumor);
                 LAST_NUCLEI.set(nuclei);
@@ -305,7 +309,6 @@ public class PDL1Tools {
                         StringBuilder sb = new StringBuilder();
                         sb.append(
                                 "CPS Thresholds: "
-
                         );
                         int[] thresholds = {1, 5, 10, 15, 20, 25, 30, 35, 40, 50};
 
@@ -474,25 +477,13 @@ public class PDL1Tools {
         return !Double.isNaN(v) && v > 0.15; // tune threshold to your assay
     }
 
+    /*
+    * User prompt with privacy statement when using the PD-L1 tool
+    * */
     public static String promptForUserWithPrivacy() {
 
         // ---- Step 1: Privacy notice ----
-        Alert notice = new Alert(Alert.AlertType.CONFIRMATION);
-        notice.setTitle("PD-L1 Scoring – Privacy notice");
-        notice.setHeaderText("Participant data will be recorded");
-        notice.setGraphic(null);
-
-        notice.setContentText(
-                "This PD-L1 scoring tool records:\n" +
-                        "• Your name (as entered)\n" +
-                        "• Slide/image name\n" +
-                        "• CPS score\n" +
-                        "• Counts (tumor denominator, nuclei)\n" +
-                        "• Start/stop time and elapsed time\n\n" +
-                        "This data is used for research/quality evaluation of scoring performance.\n" +
-                        "Data is saved locally to the project’s output log (CSV).\n\n" +
-                        "By clicking Next, you consent to this collection."
-        );
+        Alert notice = getAlert();
 
         ButtonType next = new ButtonType("Next", ButtonBar.ButtonData.OK_DONE);
         ButtonType cancel = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
@@ -520,6 +511,30 @@ public class PDL1Tools {
         }
 
         return name;
+    }
+
+    // Privacy alert
+    private static Alert getAlert() {
+        Alert notice = new Alert(Alert.AlertType.CONFIRMATION);
+        notice.setTitle("PD-L1 Scoring – Privacy notice");
+        notice.setHeaderText("Participant data will be recorded");
+        notice.setGraphic(null);
+
+        notice.setContentText(
+                """
+                        This PD-L1 scoring tool records:
+                        • Your name (as entered)
+                        • Slide/image name
+                        • CPS score
+                        • Counts (tumor denominator, nuclei)
+                        • Start/stop time and elapsed time
+                        
+                        This data is used for research/quality evaluation of scoring performance.
+                        Data is saved locally to the project’s output log (CSV).
+                        
+                        By clicking Next, you consent to this collection."""
+        );
+        return notice;
     }
 
 }
