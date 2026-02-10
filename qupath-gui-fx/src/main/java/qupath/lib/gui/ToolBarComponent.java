@@ -184,7 +184,7 @@ class ToolBarComponent {
 				PDL1Tools.setCurrentUser(user); // used by exporter later
 
 				PDL1Timer.start(imageData);
-				PDL1Tools.startViewportCounter(viewer);
+				//PDL1Tools.startViewportCounter(viewer);
 
 				// Hide analysis pane AFTER scoring begins
 				if (mgr != null)
