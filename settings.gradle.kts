@@ -2,7 +2,7 @@ import org.apache.tools.ant.taskdefs.condition.Os
 
 pluginManagement {
     plugins {
-        kotlin("jvm") version "2.3.0"
+        kotlin("jvm") version "2.3.21"
     }
 }
 plugins {
@@ -105,14 +105,14 @@ dependencyResolutionManagement {
         }
 
         create("sciJava") {
-            from("org.scijava:pom-scijava:43.0.0")
+            from("org.scijava:pom-scijava:44.0.0")
         }
 
     }
 
     repositories {
-        maven("https://maven.scijava.org/content/groups/public/")
         mavenCentral()
+        maven("https://maven.scijava.org/content/groups/public/")
     }
 
 }

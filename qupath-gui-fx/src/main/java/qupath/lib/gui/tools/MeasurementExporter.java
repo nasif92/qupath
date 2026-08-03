@@ -21,12 +21,34 @@
 
 package qupath.lib.gui.tools;
 
-import java.util.Collections;
+import java.awt.image.BufferedImage;
+import java.io.BufferedWriter;
+import java.io.Closeable;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.DoubleConsumer;
+import java.util.function.ObjDoubleConsumer;
+import java.util.function.Predicate;
+import java.util.zip.GZIPOutputStream;
+import org.apache.commons.lang3.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.lib.gui.localization.QuPathResources;
 import qupath.lib.gui.measure.ObservableMeasurementTableData;
+import qupath.lib.gui.measure.PathTableData;
 import qupath.lib.images.ImageData;
 import qupath.lib.lazy.interfaces.LazyValue;
 import qupath.lib.objects.PathAnnotationObject;
@@ -38,29 +60,9 @@ import qupath.lib.objects.PathTileObject;
 import qupath.lib.objects.TMACoreObject;
 import qupath.lib.projects.ProjectImageEntry;
 
-import java.awt.image.BufferedImage;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-import java.util.function.DoubleConsumer;
-import java.util.function.Predicate;
-
 
 /**
  * Helper class for exporting the measurements of one or more entries in a project.
- * 
- * @author Melvin Gelbard
  */
 public class MeasurementExporter {
 	
@@ -77,13 +79,16 @@ public class MeasurementExporter {
 	 */
 	private static final String DEFAULT_SEPARATOR = "\t";
 
-	private static final DoubleConsumer NULL_PROGRESS_MONITOR = d -> {};
+	private static final ObjDoubleConsumer<String> NULL_PROGRESS_MONITOR = (message, progress) -> {};
 
 	private List<String> includeOnlyColumns = new ArrayList<>();
-	private List<String> excludeColumns = new ArrayList<>();
+	private List<String> excludeColumns = new ArrayList<>(); // To be removed (may replace with general predicate)
 	private Predicate<PathObject> filter;
 
 	private int nDecimalPlaces = DECIMAL_PLACES_DEFAULT;
+
+	// New in v0.7.0
+	private boolean includeProjectMetadata = false;
 	
 	// Default: Export for the entire image
 	private Class<? extends PathObject> type = PathRootObject.class;
@@ -93,7 +98,7 @@ public class MeasurementExporter {
 	
 	private List<ProjectImageEntry<BufferedImage>> imageList;
 
-	private DoubleConsumer progressMonitor = NULL_PROGRESS_MONITOR;
+	private ObjDoubleConsumer<String> progressMonitor = NULL_PROGRESS_MONITOR;
 	
 	public MeasurementExporter() {}
 
@@ -203,9 +208,23 @@ public class MeasurementExporter {
 	 * @param excludeColumns the columns to exclude
 	 * @return this exporter
 	 * @see #includeOnlyColumns
+	 * @deprecated v0.7.0 use {@link #includeOnlyColumns(String...)} instead
 	 */
+	@Deprecated
 	public MeasurementExporter excludeColumns(String... excludeColumns) {
+		logger.warn("excludeColumns is deprecated and will be removed in a future version");
 		this.excludeColumns = Arrays.asList(excludeColumns);
+		return this;
+	}
+
+	/**
+	 * Optionally include columns for project entry metadata (key/value pairs).
+	 * @param doInclude true if metadata should be included in the table, false otherwise
+	 * @return this exporter
+	 * @since v0.7.0
+	 */
+	public MeasurementExporter includeProjectMetadata(boolean doInclude) {
+		this.includeProjectMetadata = doInclude;
 		return this;
 	}
 	
@@ -237,8 +256,20 @@ public class MeasurementExporter {
 	 * This is a consumer that takes a value between 0.0 (at the start) and 1.0 (export complete).
 	 * @param monitor the optional progress monitor
 	 * @return this exporter
+	 * @deprecated v0.7.0, use {@link #progressMonitor(ObjDoubleConsumer)} instead
 	 */
+	@Deprecated
 	public MeasurementExporter progressMonitor(DoubleConsumer monitor) {
+		return progressMonitor((message, progress) -> monitor.accept(progress));
+	}
+
+	/**
+	 * Set a progress monitor to be notified during export.
+	 * This is a consumer that takes a value between 0.0 (at the start) and 1.0 (export complete).
+	 * @param monitor the optional progress monitor
+	 * @return this exporter
+	 */
+	public MeasurementExporter progressMonitor(ObjDoubleConsumer<String> monitor) {
 		this.progressMonitor = monitor == null ? NULL_PROGRESS_MONITOR : monitor;
 		return this;
 	}
@@ -267,7 +298,9 @@ public class MeasurementExporter {
 	/**
 	 * Returns the list of columns to exclude from export.
 	 * @return list of column names
+	 * @deprecated v0.7.0 in favor of specifying columns to include only
 	 */
+	@Deprecated
 	public List<String> getExcludeColumns() {
 		return excludeColumns;
 	}
@@ -278,6 +311,14 @@ public class MeasurementExporter {
 	 */
 	public List<String> getIncludeColumns() {
 		return includeOnlyColumns;
+	}
+
+	/**
+	 * Query whether project entry metadata should be export.
+	 * @return true if project entry metadata values should be included, false otherwise
+	 */
+	public boolean getIncludeProjectMetadata() {
+		return includeProjectMetadata;
 	}
 	
 	/**
@@ -306,11 +347,23 @@ public class MeasurementExporter {
 	 * @throws IOException if the export files
 	 */
 	public void exportMeasurements(File file) throws IOException, InterruptedException {
-		try (var fos = new FileOutputStream(file)) {
+		try (var fos = createFileOutputStream(file)) {
 			doExport(fos, getSeparatorToUse(file.getName()));
 		} catch (Exception e) {
 			throw new IOException("Error exporting measurements", e);
 		}
+	}
+
+	/**
+	 * Create a file output stream - possibly wrapped in a GZIP output stream, based upon the file extension.
+	 */
+	private static OutputStream createFileOutputStream(File file) throws IOException {
+		var stream = new FileOutputStream(file);
+		String name = file.getName().toLowerCase();
+		if (name.endsWith(".gz"))
+			return new GZIPOutputStream(stream);
+		else
+			return stream;
 	}
 
 	private Predicate<String> createColumnPredicate() {
@@ -335,6 +388,8 @@ public class MeasurementExporter {
 			return separator;
 		if (filename != null) {
 			var lower = filename.toLowerCase();
+			if (lower.endsWith(".gz"))
+				lower = lower.substring(0, lower.length()-3);
 			if (lower.endsWith(".csv"))
 				return ",";
 			else if (lower.endsWith(".tsv"))
@@ -362,150 +417,244 @@ public class MeasurementExporter {
 			logger.warn("No images selected for export!");
 			return;
 		}
-		var monitor = new ProgressMonitor(imageList.size() + 1, progressMonitor);
-		long startTime = System.currentTimeMillis();
-		var table = new MeasurementTable(imageList, filter, type, createColumnPredicate(), nDecimalPlaces);
 
-		try (PrintWriter writer = new PrintWriter(new BufferedWriter(new OutputStreamWriter(stream, StandardCharsets.UTF_8)))) {
-			var header = table.getColumnNames();
-			writeRow(writer, header, separator);
-            for (Iterator<List<String>> it = table.getIterator(monitor); it.hasNext(); ) {
-				writeRow(writer, it.next(), separator);
+		// For progress monitoring, we assume all images have the same weight -
+		// and add 1 unit of work for preparation to determine columns.
+		// (Note this could be improved by creating a weight for each image based upon object
+		// counts, determined during the preparation phase).
+		var monitor = progressMonitor == null ? NULL_PROGRESS_MONITOR : progressMonitor;
+		double currentWork = 0;
+		double totalWork = imageList.size() + 1;
+		monitor.accept(QuPathResources.getString("Tools.MeasurementExporter.preparing"), 0.0);
+
+		long startTime = System.currentTimeMillis();
+		var thread = Thread.currentThread();
+
+		try (TableWriter<PathObject> writer = createWriter(stream, separator)) {
+			writer.writeHeader();
+			for (var entry : imageList) {
+				checkInterrupted(thread);
+
+				String message = entry.getImageName();
+				monitor.accept(message, (++currentWork) / totalWork);
+
+				var table = loadTable(entry, type, filter, includeProjectMetadata);
+				var items = table.getItems();
+				double i = 0;
+				for (var item : items) {
+					checkInterrupted(thread);
+					writer.writeRow(table, item);
+
+					// Increment proportionately during long exports
+					if ((++i) % 1000 == 0) {
+						monitor.accept(message, (currentWork + i / (items.size() + 1)) / totalWork);
+					}
+				}
+
 			}
 		} catch (Exception e) {
 			throw new IOException("Error exporting measurements", e);
+		} finally {
+			monitor.accept(QuPathResources.getString("Tools.MeasurementExporter.exportComplete"), 1.0);
 		}
-		monitor.complete();
 		long endTime = System.currentTimeMillis();
 		long timeMillis = endTime - startTime;
 		String time;
 		if (timeMillis > 1000*60)
-			time = String.format("Total processing time: %.2f minutes", timeMillis/(1000.0 * 60.0));
+			time = String.format("Total export time: %.2f minutes", timeMillis/(1000.0 * 60.0));
 		else if (timeMillis > 1000)
-			time = String.format("Total processing time: %.2f seconds", timeMillis/(1000.0));
+			time = String.format("Total export time: %.2f seconds", timeMillis/(1000.0));
 		else
-			time = String.format("Total processing time: %d ms", timeMillis);
+			time = String.format("Total export time: %d ms", timeMillis);
 		logger.info("Processed {} images", imageList.size());
 		logger.info(time);
 	}
 
-	private void writeRow(PrintWriter writer, List<String> strings, String delim) {
-		int n = strings.size();
-		for (int i = 0; i < n; i++) {
-			var val = strings.get(i);
-			if (val != null)
-				writer.write(val);
-			if (i < n-1)
-				writer.write(delim);
-		}
-		writer.println();
+
+	private TableWriter<PathObject> createWriter(OutputStream stream, String separator) {
+		var columns = getColumnNames(imageList, type, filter, createColumnPredicate(), includeProjectMetadata);
+		return new TextTableWriter<>(stream, columns, separator, nDecimalPlaces);
 	}
 
-	private static class MeasurementTable {
 
-		private final ObservableMeasurementTableData tableModel;
-		private final Predicate<PathObject> filter;
-		private final Class<? extends PathObject> type;
-		private final Predicate<String> columnPredicate;
-		private final int nDecimalPlaces;
-		private Collection<String> headers;
-		private final List<ProjectImageEntry<BufferedImage>> imageEntries;
-		private ProjectImageEntry<?> currentImageEntry = null;
-
-		private MeasurementTable(List<ProjectImageEntry<BufferedImage>> imageEntries, Predicate<PathObject> filter, Class<? extends PathObject> type, Predicate<String> columnPredicate, int nDecimalPlaces) {
-			this.imageEntries = imageEntries;
-            this.nDecimalPlaces = nDecimalPlaces;
-            this.tableModel = new ObservableMeasurementTableData();
-            this.filter = filter;
-			this.type = type;
-			this.columnPredicate = columnPredicate;
+	private static void checkInterrupted(Thread thread) throws InterruptedException {
+		if (thread.isInterrupted()) {
+			throw new InterruptedException("Export interrupted!");
 		}
+	}
 
-		List<String> getColumnNames() {
-			if (headers == null) {
-				headers = Collections.synchronizedSet(new LinkedHashSet<>());
-				for (var entry: imageEntries) {
-					ensureLoaded(entry);
-					headers.addAll(tableModel.getAllNames().stream().filter(columnPredicate).toList());
-				}
-			}
-			return List.copyOf(headers);
-		}
 
-		Iterator<List<String>> getIterator(ProgressMonitor monitor) {
-			return new Iterator<>() {
-				int i = 0;
-				int imageIndex = 0;
-
-				@Override
-				public boolean hasNext() {
-					// obvious case: past the last image
-					if (imageIndex == imageEntries.size()) {
-						return false;
-					}
-					ensureLoaded(imageEntries.get(imageIndex));
-					// not past the last image and something left in current table
-					if (i < tableModel.getItems().size()) {
-						return true;
-					} else {
-						// otherwise, load the next table(s) and perform the same checks
-						i = 0;
-						imageIndex++;
-						monitor.incrementProgress();
-						return hasNext();
-					}
-				}
-
-				@Override
-				public List<String> next() {
-					ensureLoaded(imageEntries.get(imageIndex));
-					var item = tableModel.getItems().get(i++);
-					return getColumnNames()
-							.stream()
-							.map(column -> tableModel.getStringValue(item, column, nDecimalPlaces))
-							.toList();
-				}
-			};
-		}
-
-		private void ensureLoaded(ProjectImageEntry<?> projectImageEntry) {
-			if (projectImageEntry == currentImageEntry) {
-				return;
-			}
-			currentImageEntry = projectImageEntry;
+	private static List<String> getColumnNames(Collection<? extends ProjectImageEntry<?>> imageEntries,
+											   Class<? extends PathObject> type,
+											   Predicate<PathObject> filter,
+											   Predicate<String> columnPredicate,
+											   boolean includeProjectMetadata) {
+		var headerSet = new LinkedHashSet<String>();
+		for (var entry: imageEntries) {
 			try {
-                ImageData<?> currentImageData = currentImageEntry.readImageData();
-				Collection<PathObject> currentObjects = currentImageData.getHierarchy().getObjects(null, type);
-				if (filter != null)
-					currentObjects = currentObjects.stream().filter(filter).toList();
-				tableModel.setImageData(currentImageData, currentObjects);
+				var tableModel = loadTable(entry, type, filter, includeProjectMetadata);
+				tableModel.getAllNames().stream().filter(columnPredicate).forEach(headerSet::add);
 			} catch (IOException e) {
-				throw new RuntimeException(e);
+				logger.error("Error loading load {}: {}", entry.getImageName(), e.getMessage(), e);
 			}
 		}
+		return List.copyOf(headerSet);
+	}
+
+	private static PathTableData<PathObject> loadTable(ProjectImageEntry<?> projectImageEntry,
+													   Class<? extends PathObject> type,
+													   Predicate<PathObject> filter,
+													   boolean includeProjectMetadata) throws IOException {
+		var table = new ObservableMeasurementTableData();
+		if (projectImageEntry == null) {
+			return table;
+		}
+		ImageData<?> currentImageData = projectImageEntry.readImageData();
+		Collection<PathObject> currentObjects = currentImageData.getHierarchy().getObjects(null, type);
+		if (filter != null)
+			currentObjects = currentObjects.stream().filter(filter).toList();
+		table.setImageData(currentImageData, currentObjects);
+		var metadata = new LinkedHashMap<>(projectImageEntry.getMetadata());
+		if (!metadata.containsKey("tags") && !projectImageEntry.getTags().isEmpty()) {
+			metadata.put("tags", "[" + String.join(",", projectImageEntry.getTags()) + "]");
+		}
+		return includeProjectMetadata ? new ExtendedTableData<>(table, Map.copyOf(projectImageEntry.getMetadata())) : table;
+	}
+
+	/**
+	 * Create an extended table data that can take a single metadata map, adding columns that return string values
+	 * for each row.
+	 * This is used to append project entry metadata to an {@link ObservableMeasurementTableData}.
+	 * @param <T>
+	 */
+	private static class ExtendedTableData<T> implements PathTableData<T> {
+
+		private final PathTableData<T> table;
+		private final Map<String, String> metadata;
+		private final Set<String> tableNames;
+		private final List<String> allNames;
+
+		ExtendedTableData(PathTableData<T> table, Map<String, String> metadata) {
+			this.table = table;
+			this.metadata = metadata;
+			this.tableNames = new LinkedHashSet<>(table.getAllNames());
+			var allNamesSet = new LinkedHashSet<>(tableNames);
+			allNamesSet.addAll(metadata.keySet());
+			this.allNames = List.copyOf(allNamesSet);
+		}
+
+		@Override
+		public List<String> getAllNames() {
+			return allNames;
+		}
+
+		@Override
+		public String getStringValue(T item, String name) {
+			return tableNames.contains(name) ? table.getStringValue(item, name) : metadata.getOrDefault(name, null);
+		}
+
+		@Override
+		public String getStringValue(T item, String name, int decimalPlaces) {
+			return tableNames.contains(name) ? table.getStringValue(item, name, decimalPlaces) : metadata.getOrDefault(name, null);
+		}
+
+		@Override
+		public List<String> getMeasurementNames() {
+			return table.getMeasurementNames();
+		}
+
+		@Override
+		public double getNumericValue(T item, String name) {
+			return table.getNumericValue(item, name);
+		}
+
+		@Override
+		public double[] getDoubleValues(String name) {
+			return table.getDoubleValues(name);
+		}
+
+		@Override
+		public List<T> getItems() {
+			return table.getItems();
+		}
 
 	}
 
-	private static class ProgressMonitor {
 
-		private final int n;
-		private final DoubleConsumer monitor;
-		private final AtomicInteger counter = new AtomicInteger();
+	interface TableWriter<T> extends Closeable {
 
-		private ProgressMonitor(int n, DoubleConsumer monitor) {
-			this.n = n;
-			this.monitor = monitor;
-		}
+		void writeHeader() throws IOException;
 
-		void incrementProgress() {
-			double val = (double)counter.incrementAndGet() / n;
-			monitor.accept(val);
-		}
-
-		void complete() {
-			counter.set(n);
-			monitor.accept(1.0);
-		}
+		void writeRow(PathTableData<T> table, T obj) throws IOException;
 
 	}
+
+	private static class TextTableWriter<T> implements TableWriter<T> {
+
+		private final Writer writer;
+		private final List<String> columns;
+		private final String separator;
+		private final int nDecimalPlaces;
+		private final int nColumns;
+		private final boolean isTabDelimited;
+
+		private TextTableWriter(OutputStream stream, Collection<String> columns, String separator, int nDecimalPlaces) {
+			this.writer = new BufferedWriter(new OutputStreamWriter(stream, StandardCharsets.UTF_8));
+			this.columns = List.copyOf(columns);
+			this.nColumns = columns.size();
+			this.separator = separator;
+			this.nDecimalPlaces = nDecimalPlaces;
+			this.isTabDelimited = "\t".endsWith(separator);
+		}
+
+		@Override
+		public void writeHeader() throws IOException {
+			for (int i = 0; i < nColumns; i++) {
+				var val = cleanValue(columns.get(i));
+				if (!val.isEmpty())
+					writer.write(val);
+				if (i < nColumns-1)
+					writer.write(separator);
+			}
+			writer.write(System.lineSeparator());
+		}
+
+		@Override
+		public void writeRow(PathTableData<T> table, T obj) throws IOException {
+			for (int c = 0; c < nColumns; c++) {
+				var val = cleanValue(table.getStringValue(obj, columns.get(c), nDecimalPlaces));
+				if (!val.isEmpty()) {
+					writer.write(val);
+				}
+				if (c < nColumns - 1) {
+					writer.write(separator);
+				}
+			}
+			writer.write(System.lineSeparator());
+		}
+
+		private String cleanValue(String val) {
+			if(val == null || val.isEmpty())
+				return "";
+			if (isTabDelimited) {
+				// For tab-delimited, we want to escape tabs - and otherwise make no changes
+				if (val.contains("\t")) {
+					val = Strings.CS.replace(val, "\t", "\\t");
+				}
+			} else {
+				// Assume CSV with a non-tab delimiter
+				if (val.contains("\"") || val.contains(separator)) {
+					// Ensure separators are wrapped in quotes - and existing quotes are replaced by double quotes
+					val = "\"" + Strings.CS.replace(val, "\"", "\"\"") + "\"";
+				}
+			}
+			return val;
+		}
+
+		@Override
+		public void close() throws IOException {
+			writer.close();
+		}
+	}
+
 }
