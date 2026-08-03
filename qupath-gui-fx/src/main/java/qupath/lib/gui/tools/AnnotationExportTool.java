@@ -136,21 +136,11 @@ public class AnnotationExportTool {
     }
     private static void showSummaryDialog(int done, List<String> failures, File outputDir) {
         if (failures.isEmpty()) {
-            Dialogs.showInfoNotification("Export annotations",
+            Dialogs.showInfoNotification("Export Annotations",
                     "Exported annotations for " + done + " image(s) to " + outputDir.getName());
             return;
         }
 
-        int succeeded = done - failures.size();
-        StringBuilder sb = new StringBuilder();
-        sb.append(succeeded).append(" of ").append(done).append(" image(s) exported successfully.\n\n");
-        sb.append("Failed:\n");
-        for (String f : failures)
-            sb.append("• ").append(f).append("\n");
-
-        Dialogs.showMessageDialog(
-                "Export annotations — completed with errors (" + succeeded + "/" + done + ")",
-                sb.toString());
     }
 
     /**
@@ -163,6 +153,9 @@ public class AnnotationExportTool {
 
         if (msg.contains("OpenSlide") && msg.contains("not a file that OpenSlide can recognize"))
             return "Image format not recognized (unsupported/non-pyramidal TIFF?)";
+
+        if (msg.contains("Unable to build ImageServer") && msg.contains("BioFormatsServerBuilder"))
+            return "Bio-Formats couldn't open this image (corrupted file, unsupported .svs variant, or missing series?)";
 
         if (ex instanceof java.io.FileNotFoundException || msg.toLowerCase().contains("no such file"))
             return "Source image file missing or moved";
