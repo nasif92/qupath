@@ -2,22 +2,17 @@ package qupath.lib.gui.tools;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import qupath.fx.dialogs.Dialogs;
-import javafx.scene.control.TextArea;
 import javafx.concurrent.Task;
-import javafx.scene.control.Alert;
 import javafx.stage.Stage;
 
 import org.controlsfx.dialog.ProgressDialog;
 import qupath.fx.dialogs.FileChoosers;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.dialogs.ProjectDialogs;
 import qupath.lib.images.ImageData;
-import qupath.lib.io.GsonTools;
 import qupath.lib.io.PathIO;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
@@ -43,7 +38,7 @@ public class AnnotationExportTool {
      * in a dialog owned by the given stage.
      *
      * @param project the project whose images should be exported
-     * @param owner   stage to own the progress dialog (may be null)
+     * @param owner   stage to own the progress dialog (maybe null)
      */
 
     public static void exportAllProjectAnnotations(Project<BufferedImage> project, Stage owner) {

@@ -158,10 +158,5 @@ public class AnnotationImportTool {
         textArea.setWrapText(true);
         textArea.setPrefSize(480, 240);
 
-        Alert alert = new Alert(failures.isEmpty() ? Alert.AlertType.INFORMATION : Alert.AlertType.WARNING);
-        alert.setTitle("Import annotations — summary");
-        alert.setHeaderText(null);
-        alert.getDialogPane().setContent(textArea);
-        alert.showAndWait();
     }
 }
