@@ -246,13 +246,13 @@ class ToolBarComponent {
 		var itemExport = new javafx.scene.control.MenuItem("Export annotations (GeoJSON)…");
 		itemExport.setOnAction(e -> {
 			var qupath = QuPathGUI.getInstance();
-			AnnotationExportTool.exportAllProjectAnnotations(qupath.getProject(), qupath.getStage());
+			AnnotationExportTool.exportCurrentImageAnnotations(qupath);
 		});
 
 		var itemImport = new javafx.scene.control.MenuItem("Import annotations (GeoJSON)…");
 		itemImport.setOnAction(e -> {
 			var qupath = QuPathGUI.getInstance();
-			AnnotationImportTool.importAllProjectAnnotations(qupath.getProject(), qupath.getStage());
+			AnnotationImportTool.importCurrentImageAnnotations(qupath);
 		});
 
 		btnAnnIO.getItems().addAll(itemExport, itemImport);
