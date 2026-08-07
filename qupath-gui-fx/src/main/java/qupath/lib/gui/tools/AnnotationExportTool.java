@@ -5,20 +5,13 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import qupath.fx.dialogs.Dialogs;
-import javafx.concurrent.Task;
-import javafx.stage.Stage;
 
-import org.controlsfx.dialog.ProgressDialog;
-import qupath.fx.dialogs.FileChoosers;
+import qupath.fx.dialogs.Dialogs;
+
 import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.images.ImageData;
 import qupath.lib.io.PathIO;
 import qupath.lib.projects.Project;
-import qupath.lib.projects.ProjectImageEntry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

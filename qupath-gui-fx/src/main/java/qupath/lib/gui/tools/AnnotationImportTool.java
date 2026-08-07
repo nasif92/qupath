@@ -5,19 +5,14 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 
-import org.controlsfx.dialog.ProgressDialog;
 import qupath.fx.dialogs.FileChoosers;
-import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
-import qupath.lib.images.ImageData;
 import qupath.lib.io.PathIO;
 import qupath.lib.objects.PathObject;
 import qupath.lib.projects.Project;
-import qupath.lib.projects.ProjectImageEntry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,17 +22,6 @@ public class AnnotationImportTool {
     private static final Logger logger = LoggerFactory.getLogger(AnnotationImportTool.class);
 
     private AnnotationImportTool() {}
-
-    private static class ImportResult {
-        final int done;
-        final int skipped;
-        final List<String> failures;
-        ImportResult(int done, int skipped, List<String> failures) {
-            this.done = done;
-            this.skipped = skipped;
-            this.failures = failures;
-        }
-    }
 
     // --- shared helper, put in a common location both tools can use ---
     private static Path getAnnotationsDirectory(Project<BufferedImage> project) throws IOException {
