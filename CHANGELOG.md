@@ -1,6 +1,11 @@
 ## Version 0.8.0 (IN PROGRESS!)
 
 ### Enhancements
+* Much improved pixel classifier user interface (https://github.com/qupath/qupath/pull/2162)
+  * Calculate feature importance
+  * Calculate performance metrics using cross validation
+  * Support 3D feature calculations (for small-ish images!)
+  * Remember settings within a QuPath session
 * Improved brush and wand tools (https://github.com/qupath/qupath/pull/2125 https://github.com/qupath/qupath/pull/2126)
   * View the size of the brush, and adjust it by scrolling with `Alt` key pressed
   * Press `F` while drawing with the brush or wand to fill holes
@@ -9,6 +14,7 @@
 * Show values for only the current visible feature when viewing features through the pixel classifier dialog (https://github.com/qupath/qupath/issues/2123)
 * Support to close more windows with Ctrl/Cmd+W (https://github.com/qupath/qupath/issues/2107)
 * Lots more strings externalized (https://github.com/qupath/qupath/pull/2104)
+* Ask to remove projects that are not found (https://github.com/qupath/qupath/pull/2167)
 
 ### Bug fixes
 * StackOverflowError at ROITypeAdapters.writeCoordinates when exporting some geometries (https://github.com/qupath/qupath/issues/2115)
@@ -18,18 +24,22 @@
 * Nested detections render poorly when filled (https://github.com/qupath/qupath/issues/2112)
 * 'Add shape features' wrongly gives 'Length µm' in pixels (https://github.com/qupath/qupath/issues/2158)
 * Adding single points can cause unhelpful 'empty' point annotations to remain (https://github.com/qupath/qupath/issues/2155)
+* Calling `ImageServer.readRegion(RegionRequest)` can return the wrong pixels if `RegionRequest.getPath()` is wrong (https://github.com/qupath/qupath/issues/2164) 
+* The image overview doesn't rescale for very 'tall' images (https://github.com/qupath/qupath/issues/2163)
 
 ### Dependency updates
 * Bio-Formats 8.5.0
-* Commonmark 0.28.0
-* Groovy 5.0.6
+* Commonmark 0.29.0
+* ControlsFX 11.2.4
+* Groovy 5.0.8
 * Guava 33.6.0
 * JavaCPP 1.5.13
-* JavaFX 26.0.1
-* Logback 1.5.32
+* JavaFX 26.0.2
+* Logback 1.6.1
 * OpenCV 4.13.0
 * qupath-fxtras 0.4.1
 * SciJava POM 44.0.0
+* SLF4J 2.0.18
 * OpenSlide 4.0.1.2
 * 
 ## Version 0.7.0
