@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import qupath.fx.dialogs.FileChoosers;
+import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.dialogs.Dialogs;
 import qupath.lib.io.PathIO;
@@ -63,26 +64,46 @@ public class AnnotationImportTool {
             return;
         }
 
-        var filter = new javafx.stage.FileChooser.ExtensionFilter("GeoJSON (gzip)", "*.geojson.gz", "*.geojson");
+        String safeName = GeneralTools.stripInvalidFilenameChars(entry.getImageName());
+        File geoJsonFile = findMatchingAnnotationFile(annotationsDir.toFile(), safeName);
 
-        File geoJsonFile = FileChoosers.promptForFile(
-                qupath.getStage(),
-                "Select annotation GeoJSON file",
-                filter);
-
-        if (geoJsonFile == null)
-            return; // cancelled
+        if (geoJsonFile == null) {
+            // No automatic match — fall back to letting the user pick
+            var filter = new javafx.stage.FileChooser.ExtensionFilter(
+                    "GeoJSON (gzip)", "*.geojson.gz", "*.geojson");
+            geoJsonFile = FileChoosers.promptForFile(
+                    qupath.getStage(),
+                    "Select annotation GeoJSON file",
+                    filter);
+            if (geoJsonFile == null)
+                return; // cancelled
+        }
 
         try {
             List<PathObject> objects = PathIO.readObjects(geoJsonFile);
             imageData.getHierarchy().addObjects(objects);
             entry.saveImageData(imageData);
             Dialogs.showInfoNotification("Import Annotations",
-                    "Imported " + objects.size() + " object(s) into " + entry.getImageName());
+                    "Imported " + objects.size() + " object(s) from " + geoJsonFile.getName());
         } catch (Exception ex) {
             logger.error("Failed to import annotations for {}", entry.getImageName(), ex);
             Dialogs.showErrorNotification("Import Annotations", "Import failed: " + ex.getMessage());
         }
     }
 
+    /**
+     * Look for {@code <safeName>.geojson.gz} or {@code <safeName>.geojson} in the
+     * given directory. Returns null if neither exists.
+     */
+    private static File findMatchingAnnotationFile(File dir, String safeName) {
+        File gz = new File(dir, safeName + ".geojson.gz");
+        if (gz.isFile())
+            return gz;
+
+        File plain = new File(dir, safeName + ".geojson");
+        if (plain.isFile())
+            return plain;
+
+        return null;
+    }
 }
