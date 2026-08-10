@@ -39,6 +39,7 @@ public class AnnotationExportTool {
         Files.createDirectories(annotationsDir);
         return annotationsDir;
     }
+
     public static void exportCurrentImageAnnotations(QuPathGUI qupath) {
         var viewer = qupath.getViewer();
         var imageData = viewer == null ? null : viewer.getImageData();
@@ -59,6 +60,14 @@ public class AnnotationExportTool {
             return;
         }
 
+        // --- check for annotations before doing anything else ---
+        var annotations = imageData.getHierarchy().getAnnotationObjects();
+        if (annotations.isEmpty()) {
+            Dialogs.showInfoNotification("Export Annotations", "No annotations exist for this slide.");
+            return;
+        }
+        // --- end check ---
+
         Path annotationsDir;
         try {
             annotationsDir = getAnnotationsDirectory(project);
@@ -78,7 +87,6 @@ public class AnnotationExportTool {
         }
 
         try {
-            var annotations = imageData.getHierarchy().getAnnotationObjects();
             PathIO.exportObjectsAsGeoJSON(outFile, annotations, PathIO.GeoJsonExportOptions.FEATURE_COLLECTION);
             Dialogs.showInfoNotification("Export Annotations", "Exported annotations to " + outFile.getName());
         } catch (Exception ex) {

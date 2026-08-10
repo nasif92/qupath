@@ -36,6 +36,7 @@ public class AnnotationImportTool {
         return annotationsDir;
     }
 
+
     public static void importCurrentImageAnnotations(QuPathGUI qupath) {
         var viewer = qupath.getViewer();
         var imageData = viewer == null ? null : viewer.getImageData();
@@ -68,7 +69,13 @@ public class AnnotationImportTool {
         File geoJsonFile = findMatchingAnnotationFile(annotationsDir.toFile(), safeName);
 
         if (geoJsonFile == null) {
-            // No automatic match — fall back to letting the user pick
+            boolean searchManually = Dialogs.showConfirmDialog(
+                    "Import Annotations",
+                    "No matching annotation file found for \"" + entry.getImageName() +
+                            "\" in the annotations folder.\n\nWould you like to search for one manually?");
+            if (!searchManually)
+                return;
+
             var filter = new javafx.stage.FileChooser.ExtensionFilter(
                     "GeoJSON (gzip)", "*.geojson.gz", "*.geojson");
             geoJsonFile = FileChoosers.promptForFile(
@@ -76,13 +83,26 @@ public class AnnotationImportTool {
                     "Select annotation GeoJSON file",
                     filter);
             if (geoJsonFile == null)
-                return; // cancelled
+                return;
         }
+
+        // --- check the hierarchy's actual current state, not a stored flag ---
+        var existingAnnotations = imageData.getHierarchy().getAnnotationObjects();
+        if (!existingAnnotations.isEmpty()) {
+            boolean proceed = Dialogs.showConfirmDialog(
+                    "Import Annotations",
+                    "This slide already has " + existingAnnotations.size() +
+                            " annotation(s). Import anyway?");
+            if (!proceed)
+                return;
+        }
+        // --- end check ---
 
         try {
             List<PathObject> objects = PathIO.readObjects(geoJsonFile);
             imageData.getHierarchy().addObjects(objects);
             entry.saveImageData(imageData);
+
             Dialogs.showInfoNotification("Import Annotations",
                     "Imported " + objects.size() + " object(s) from " + geoJsonFile.getName());
         } catch (Exception ex) {
