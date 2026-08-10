@@ -237,32 +237,36 @@ class ToolBarComponent {
 	});
 
 		// Import and Export Annotation button
-		var btnAnnIO = new javafx.scene.control.MenuButton();
-		btnAnnIO.setId("annIOButton");
-		btnAnnIO.setTooltip(new javafx.scene.control.Tooltip("Import / export annotations"));
-		btnAnnIO.setGraphic(IconFactory.createNode(
-				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.ARROW_DOUBLE_TOOL));
-
-		var itemExport = new javafx.scene.control.MenuItem("Export annotations (GeoJSON)…");
-		itemExport.setOnAction(e -> {
+		// Export annotations button
+		var btnExport = new javafx.scene.control.Button();
+		btnExport.setId("annExportButton");
+		btnExport.setTooltip(new javafx.scene.control.Tooltip("Export annotations"));
+		btnExport.setGraphic(IconFactory.createNode(
+				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.ARROW_END_TOOL));
+		btnExport.setOnAction(e -> {
 			var qupath = QuPathGUI.getInstance();
 			AnnotationExportTool.exportCurrentImageAnnotations(qupath);
 		});
 
-		var itemImport = new javafx.scene.control.MenuItem("Import annotations (GeoJSON)…");
-		itemImport.setOnAction(e -> {
+		// Import annotations button
+		var btnImport = new javafx.scene.control.Button();
+		btnImport.setId("annImportButton");
+		btnImport.setTooltip(new javafx.scene.control.Tooltip("Import annotations"));
+		btnImport.setGraphic(IconFactory.createNode(
+				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.ARROW_START_TOOL));
+		btnImport.setOnAction(e -> {
 			var qupath = QuPathGUI.getInstance();
 			AnnotationImportTool.importCurrentImageAnnotations(qupath);
 		});
 
-		btnAnnIO.getItems().addAll(itemExport, itemImport);
 
 		nodes.add(createSeparator());
 		nodes.add(btnPdl1);
 		nodes.add(createSeparator());
 
 		nodes.add(createSeparator());
-		nodes.add(btnAnnIO);
+		nodes.add(btnExport);
+		nodes.add(btnImport);
 		nodes.add(createSeparator());
 
 		nodes.add(createToggleButton(toolManager.getSelectionModeAction()));

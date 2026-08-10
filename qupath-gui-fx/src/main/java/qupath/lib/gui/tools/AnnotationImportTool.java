@@ -65,7 +65,7 @@ public class AnnotationImportTool {
             return;
         }
 
-        String safeName = GeneralTools.stripInvalidFilenameChars(entry.getImageName());
+        String safeName = GeneralTools.stripInvalidFilenameChars(GeneralTools.stripExtension(entry.getImageName()));
         File geoJsonFile = findMatchingAnnotationFile(annotationsDir.toFile(), safeName);
 
         if (geoJsonFile == null) {

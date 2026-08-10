@@ -76,7 +76,7 @@ public class AnnotationExportTool {
             return;
         }
 
-        String safeName = GeneralTools.stripInvalidFilenameChars(entry.getImageName());
+        String safeName = GeneralTools.stripInvalidFilenameChars(GeneralTools.stripExtension(entry.getImageName()));
         File outFile = new File(annotationsDir.toFile(), safeName + ".geojson.gz");
 
         if (outFile.exists()) {
