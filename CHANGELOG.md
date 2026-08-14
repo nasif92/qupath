@@ -10,6 +10,7 @@
   * View the size of the brush, and adjust it by scrolling with `Alt` key pressed
   * Press `F` while drawing with the brush or wand to fill holes
   * Avoid diagonal lines when using the wand, to make clearer when a pixel is 'inside' or 'outside'
+* New 'curtains' effect with image overlays (https://github.com/qupath/qupath/pull/2175)
 * Much faster `ObjectMeasurements`, especially for images with many channels (https://github.com/qupath/qupath/pull/2113)
 * Show values for only the current visible feature when viewing features through the pixel classifier dialog (https://github.com/qupath/qupath/issues/2123)
 * Support to close more windows with Ctrl/Cmd+W (https://github.com/qupath/qupath/issues/2107)
@@ -29,14 +30,14 @@
 
 ### Dependency updates
 * Bio-Formats 8.5.0
-* Commonmark 0.29.0
+* Commonmark 0.30.0
 * ControlsFX 11.2.4
 * Groovy 5.0.8
 * Guava 33.6.0
 * JavaCPP 1.5.13
 * JavaFX 26.0.2
 * Logback 1.6.1
-* OpenCV 4.13.0
+* OpenCV 4.14.0
 * qupath-fxtras 0.4.1
 * SciJava POM 44.0.0
 * SLF4J 2.0.18
