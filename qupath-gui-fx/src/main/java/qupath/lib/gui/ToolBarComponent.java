@@ -251,9 +251,9 @@ class ToolBarComponent {
 		// Import annotations button
 		var btnImport = new javafx.scene.control.Button();
 		btnImport.setId("annImportButton");
-		btnImport.setTooltip(new javafx.scene.control.Tooltip("Import annotations"));
+		btnImport.setTooltip(new javafx.scene.control.Tooltip("Import annotations & detections"));
 		btnImport.setGraphic(IconFactory.createNode(
-				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.ARROW_START_TOOL));
+				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.DOWNLOAD));
 		btnImport.setOnAction(e -> {
 			var qupath = QuPathGUI.getInstance();
 			AnnotationImportTool.importCurrentImageAnnotations(qupath);

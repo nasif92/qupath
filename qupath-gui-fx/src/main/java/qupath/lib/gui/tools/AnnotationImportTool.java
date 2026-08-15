@@ -115,7 +115,7 @@ public class AnnotationImportTool {
         };
 
         ProgressDialog progressDialog = new ProgressDialog(task);
-        progressDialog.setTitle("Import Annotations");
+        progressDialog.setTitle("Importing Annotations & Detections");
         progressDialog.initOwner(qupath.getStage());
 
         task.setOnSucceeded(e -> {
