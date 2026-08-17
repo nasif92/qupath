@@ -15,7 +15,6 @@ import javafx.scene.layout.GridPane;
 
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
-import qupath.lib.gui.tools.Magee.MageeEquations;
 import qupath.lib.projects.Project;
 
 import org.slf4j.Logger;
@@ -254,17 +253,24 @@ public class MageeTools {
      * if the file doesn't exist or its content isn't parseable as a number.
      */
     private static Double readScoreFile(Path mageeDir, String filename) {
-        File file = mageeDir.resolve(filename).toFile();
-        if (!file.isFile())
+        File exact = mageeDir.resolve(filename).toFile();
+        File target = exact.isFile() ? exact : findCaseInsensitive(mageeDir, filename);
+
+        if (target == null)
             return null;
 
         try {
-            String content = Files.readString(file.toPath()).trim();
+            String content = Files.readString(target.toPath()).trim();
             return Double.parseDouble(content);
         } catch (IOException | NumberFormatException ex) {
-            logger.warn("Could not read score from {}: {}", file.getName(), ex.getMessage());
+            logger.warn("Could not read score from {}: {}", target.getName(), ex.getMessage());
             return null;
         }
+    }
+
+    private static File findCaseInsensitive(Path dir, String targetName) {
+        File[] candidates = dir.toFile().listFiles((d, name) -> name.equalsIgnoreCase(targetName));
+        return (candidates != null && candidates.length > 0) ? candidates[0] : null;
     }
 
     /**
