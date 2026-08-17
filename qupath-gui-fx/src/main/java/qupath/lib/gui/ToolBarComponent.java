@@ -276,13 +276,13 @@ class ToolBarComponent {
 		nodes.add(btnPdl1);
 		nodes.add(createSeparator());
 
-		nodes.add(createSeparator());
+		//nodes.add(createSeparator());
 		nodes.add(btnExport);
-		nodes.add(btnImport);
+		//nodes.add(btnImport);
 		nodes.add(createSeparator());
 
-		nodes.add(btnMagee);
-		nodes.add(createSeparator());
+		//nodes.add(btnMagee);
+		//nodes.add(createSeparator());
 
 		nodes.add(createToggleButton(toolManager.getSelectionModeAction()));
 
