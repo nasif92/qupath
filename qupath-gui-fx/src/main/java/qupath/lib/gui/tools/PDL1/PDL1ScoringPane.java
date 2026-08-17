@@ -1,10 +1,13 @@
-package qupath.lib.gui.tools;
+package qupath.lib.gui.tools.PDL1;
 
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.tools.PDL1.PDL1Export;
+import qupath.lib.gui.tools.PDL1.PDL1Timer;
+import qupath.lib.gui.tools.PDL1.PDL1Tools;
 import qupath.lib.images.ImageData;
 
 

@@ -1,4 +1,4 @@
-package qupath.lib.gui.tools;
+package qupath.lib.gui.tools.PDL1;
 
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
@@ -11,6 +11,8 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.StackPane;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.tools.PDL1.PDL1ScoringPane;
+import qupath.lib.gui.tools.PDL1.PDL1Timer;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.images.ImageData;
 import qupath.lib.measurements.MeasurementList;

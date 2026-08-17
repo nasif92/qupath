@@ -47,7 +47,7 @@ import qupath.lib.gui.panes.PathObjectHierarchyView;
 import qupath.lib.gui.panes.ProjectBrowser;
 import qupath.lib.gui.panes.SelectedMeasurementTableView;
 import qupath.lib.gui.panes.WorkflowCommandLogView;
-import qupath.lib.gui.tools.PDL1ScoringPane;
+import qupath.lib.gui.tools.PDL1.PDL1ScoringPane;
 import qupath.lib.images.ImageData;
 
 import java.awt.image.BufferedImage;

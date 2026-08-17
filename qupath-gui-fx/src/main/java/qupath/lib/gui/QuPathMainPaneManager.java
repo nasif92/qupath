@@ -35,7 +35,7 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import qupath.lib.gui.panes.ProjectBrowser;
 import qupath.lib.gui.tools.CommandFinderTools;
-import qupath.lib.gui.tools.PDL1ScoringPane;
+import qupath.lib.gui.tools.PDL1.PDL1ScoringPane;
 import qupath.lib.images.ImageData;
 
 import java.awt.image.BufferedImage;

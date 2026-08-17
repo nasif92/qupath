@@ -74,6 +74,11 @@ import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.localization.QuPathResources;
 import qupath.lib.gui.tools.*;
 import qupath.lib.gui.tools.IconFactory.PathIcons;
+import qupath.lib.gui.tools.Magee.AnnotationExportTool;
+import qupath.lib.gui.tools.Magee.DetectionImportTool;
+import qupath.lib.gui.tools.Magee.MageeTools;
+import qupath.lib.gui.tools.PDL1.PDL1Timer;
+import qupath.lib.gui.tools.PDL1.PDL1Tools;
 import qupath.lib.gui.viewer.QuPathViewer;
 import qupath.lib.gui.viewer.QuPathViewerListener;
 import qupath.lib.gui.viewer.tools.ExtendedPathTool;
@@ -251,14 +256,21 @@ class ToolBarComponent {
 		// Import annotations button
 		var btnImport = new javafx.scene.control.Button();
 		btnImport.setId("annImportButton");
-		btnImport.setTooltip(new javafx.scene.control.Tooltip("Import annotations & detections"));
+		btnImport.setTooltip(new javafx.scene.control.Tooltip("Import Detections"));
 		btnImport.setGraphic(IconFactory.createNode(
 				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.DOWNLOAD));
 		btnImport.setOnAction(e -> {
 			var qupath = QuPathGUI.getInstance();
-			AnnotationImportTool.importCurrentImageAnnotations(qupath);
+			DetectionImportTool.importCurrentImageDetections(qupath);
 		});
 
+		// Magee Equation placeholders
+		var btnMagee = new javafx.scene.control.Button();
+		btnMagee.setId("mageeButton");
+		btnMagee.setTooltip(new javafx.scene.control.Tooltip("Magee equation calculator"));
+		btnMagee.setGraphic(IconFactory.createNode(
+				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.MEASURE));
+		btnMagee.setOnAction(e -> MageeTools.showMageeCalculator(QuPathGUI.getInstance()));
 
 		nodes.add(createSeparator());
 		nodes.add(btnPdl1);
@@ -267,6 +279,9 @@ class ToolBarComponent {
 		nodes.add(createSeparator());
 		nodes.add(btnExport);
 		nodes.add(btnImport);
+		nodes.add(createSeparator());
+
+		nodes.add(btnMagee);
 		nodes.add(createSeparator());
 
 		nodes.add(createToggleButton(toolManager.getSelectionModeAction()));

@@ -1,44 +1,23 @@
-package qupath.lib.gui.tools;
+package qupath.lib.gui.tools.Magee;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
 import qupath.fx.dialogs.Dialogs;
-
 import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.io.PathIO;
 import qupath.lib.projects.Project;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Helper methods for batch-exporting annotations from every image
- * in a project as separate GeoJSON files.
- */
 public class AnnotationExportTool {
 
     private static final Logger logger = LoggerFactory.getLogger(AnnotationExportTool.class);
 
-    private AnnotationExportTool() {
-        // static helper class, no instances
-    }
-
-    // --- shared helper, put in a common location both tools can use ---
-    private static Path getAnnotationsDirectory(Project<BufferedImage> project) throws IOException {
-        Path path = project.getPath();
-        if (path == null)
-            throw new IOException("Project has no local file path (not stored on local filesystem)");
-
-        Path baseDir = Files.isDirectory(path) ? path : path.getParent();
-        Path annotationsDir = baseDir.resolve("annotations");
-        Files.createDirectories(annotationsDir);
-        return annotationsDir;
-    }
+    private AnnotationExportTool() {}
 
     public static void exportCurrentImageAnnotations(QuPathGUI qupath) {
         var viewer = qupath.getViewer();
@@ -60,13 +39,11 @@ public class AnnotationExportTool {
             return;
         }
 
-        // --- check for annotations before doing anything else ---
         var annotations = imageData.getHierarchy().getAnnotationObjects();
         if (annotations.isEmpty()) {
             Dialogs.showInfoNotification("Export Annotations", "No annotations exist for this slide.");
             return;
         }
-        // --- end check ---
 
         Path annotationsDir;
         try {
@@ -88,6 +65,7 @@ public class AnnotationExportTool {
 
         try {
             PathIO.exportObjectsAsGeoJSON(outFile, annotations, PathIO.GeoJsonExportOptions.FEATURE_COLLECTION);
+            entry.saveImageData(imageData);
             Dialogs.showInfoNotification("Export Annotations", "Exported annotations to " + outFile.getName());
         } catch (Exception ex) {
             logger.error("Failed to export annotations for {}", entry.getImageName(), ex);
@@ -95,5 +73,14 @@ public class AnnotationExportTool {
         }
     }
 
+    static Path getAnnotationsDirectory(Project<BufferedImage> project) throws IOException {
+        Path path = project.getPath();
+        if (path == null)
+            throw new IOException("Project has no local file path (not stored on local filesystem)");
 
+        Path baseDir = Files.isDirectory(path) ? path : path.getParent();
+        Path annotationsDir = baseDir.resolve("annotations");
+        Files.createDirectories(annotationsDir);
+        return annotationsDir;
+    }
 }

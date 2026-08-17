@@ -1,6 +1,7 @@
-package qupath.lib.gui.tools;
+package qupath.lib.gui.tools.PDL1;
 
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.gui.tools.PDL1.PDL1Tools;
 import qupath.lib.images.ImageData;
 import qupath.lib.projects.ProjectImageEntry;
 
