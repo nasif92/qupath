@@ -63,14 +63,18 @@ public class MageeTools {
             return;
         }
 
-        Double erScore = readScoreFile(mageeDir, "ER.txt");
-        Double prScore = readScoreFile(mageeDir, "PR.txt");
-        Double ki67Score = readScoreFile(mageeDir, "Ki67.txt");
+        ScoreResult erResult = readScoreFile(mageeDir, "ER.txt");
+        ScoreResult prResult = readScoreFile(mageeDir, "PR.txt");
+        ScoreResult ki67Result = readScoreFile(mageeDir, "Ki67.txt");
+
+        boolean anyFailed = erResult.state() == ScoreState.FAILED
+                || prResult.state() == ScoreState.FAILED
+                || ki67Result.state() == ScoreState.FAILED;
 
         StringBuilder missing = new StringBuilder();
-        if (erScore == null) missing.append("ER.txt ");
-        if (prScore == null) missing.append("PR.txt ");
-        if (ki67Score == null) missing.append("Ki67.txt ");
+        if (erResult.state() == ScoreState.MISSING) missing.append("ER.txt ");
+        if (prResult.state() == ScoreState.MISSING) missing.append("PR.txt ");
+        if (ki67Result.state() == ScoreState.MISSING) missing.append("Ki67.txt ");
         if (!missing.isEmpty()) {
             Dialogs.showInfoNotification("Magee Calculator",
                     "Could not read: " + missing + "— values will need to be entered manually.");
@@ -82,19 +86,11 @@ public class MageeTools {
         // --- build form fields ---
         TextField accessionField = new TextField(accessionId);
         accessionField.setEditable(false);
-        accessionField.setStyle("-fx-opacity: 1; -fx-text-fill: black;");
+        styleReadOnly(accessionField);
 
-        TextField erField = new TextField(erScore != null ? String.valueOf(erScore) : "");
-        erField.setEditable(false);
-        erField.setStyle("-fx-opacity: 1; -fx-text-fill: black;");
-
-        TextField prField = new TextField(prScore != null ? String.valueOf(prScore) : "");
-        prField.setEditable(false);
-        prField.setStyle("-fx-opacity: 1; -fx-text-fill: black;");
-
-        TextField ki67Field = new TextField(ki67Score != null ? String.valueOf(ki67Score) : "");
-        ki67Field.setEditable(false);
-        ki67Field.setStyle("-fx-opacity: 1; -fx-text-fill: black;");
+        TextField erField = buildScoreField(erResult);
+        TextField prField = buildScoreField(prResult);
+        TextField ki67Field = buildScoreField(ki67Result);
 
         ComboBox<Integer> nottinghamBox = new ComboBox<>();
         nottinghamBox.getItems().addAll(3, 4, 5, 6, 7, 8, 9);
@@ -105,8 +101,14 @@ public class MageeTools {
         TextField her2SishField = new TextField();
         TextField tumorSizeField = new TextField();
 
-        // Pre-fill the manually-entered fields if a saved row exists
-        if (existingRow != null) {
+        if (anyFailed) {
+            nottinghamBox.setDisable(true);
+            mitoticBox.setDisable(true);
+            her2IhcBox.setDisable(true);
+            her2SishField.setDisable(true);
+            tumorSizeField.setDisable(true);
+        } else if (existingRow != null) {
+            // Pre-fill the manually-entered fields if a saved row exists
             try {
                 nottinghamBox.setValue(Integer.parseInt(existingRow.get("Nottingham Score")));
                 mitoticBox.setValue(Integer.parseInt(existingRow.get("Mitotic Score")));
@@ -133,17 +135,20 @@ public class MageeTools {
         grid.addRow(row++, new Label("HER2 IHC (0-3)"), her2IhcBox);
         grid.addRow(row++, new Label("HER2 SISH"), her2SishField);
         grid.addRow(row++, new Label("Tumor size (mm)"), tumorSizeField);
-
         Label resultLabel = new Label();
         resultLabel.setWrapText(true);
-        resultLabel.setStyle("-fx-font-weight: bold;");
 
-        // If a saved row exists, show its previously-computed result immediately
-        if (existingRow != null) {
+        if (anyFailed) {
+            resultLabel.setText("FAILED");
+            resultLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: red;");
+        } else if (existingRow != null) {
             resultLabel.setText(String.format(
                     "Eq1: %s   Eq2: %s   Eq3: %s   →  %s",
                     existingRow.get("Magee Eq 1"), existingRow.get("Magee Eq 2"),
                     existingRow.get("Magee Eq 3"), existingRow.get("Magee Decision")));
+            resultLabel.setStyle("-fx-font-weight: bold;");
+        } else {
+            resultLabel.setStyle("-fx-font-weight: bold;");
         }
 
         grid.add(resultLabel, 0, row++, 2, 1);
@@ -153,8 +158,15 @@ public class MageeTools {
         dialog.getDialogPane().setContent(grid);
 
         ButtonType calcType = new ButtonType("Calculate", ButtonBar.ButtonData.APPLY);
-        ButtonType saveType = new ButtonType("Save to magee.csv", ButtonBar.ButtonData.OK_DONE);
+        ButtonType saveType = new ButtonType("Save to CSV", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(calcType, saveType, ButtonType.CANCEL);
+
+        if (anyFailed) {
+            Node calcBtnNode = dialog.getDialogPane().lookupButton(calcType);
+            Node saveBtnNode = dialog.getDialogPane().lookupButton(saveType);
+            if (calcBtnNode != null) calcBtnNode.setDisable(true);
+            if (saveBtnNode != null) saveBtnNode.setDisable(true);
+        }
 
         if (qupath.getStage() != null)
             dialog.initOwner(qupath.getStage());
@@ -193,6 +205,34 @@ public class MageeTools {
         }
     }
 
+    private static TextField buildScoreField(ScoreResult result) {
+        TextField field = new TextField();
+        switch (result.state()) {
+            case VALID -> {
+                field.setText(String.valueOf(result.value()));
+                field.setEditable(false);
+                styleReadOnly(field);
+            }
+            case FAILED -> {
+                field.setText("FAILED");
+                field.setEditable(false);
+                styleFailed(field);
+            }
+            case MISSING -> {
+                field.setText("");
+                field.setEditable(true);
+            }
+        }
+        return field;
+    }
+
+    private static void styleReadOnly(TextField field) {
+        field.setStyle("-fx-control-inner-background: #d9d9d9; -fx-opacity: 1; -fx-text-fill: black;");
+    }
+
+    private static void styleFailed(TextField field) {
+        field.setStyle("-fx-control-inner-background: #d9d9d9; -fx-opacity: 1; -fx-text-fill: red; -fx-font-weight: bold;");
+    }
     /**
      * Reads the single data row from an existing magee.csv, if present, as a
      * column-name -> value map. Returns null if the file doesn't exist or
@@ -246,25 +286,34 @@ public class MageeTools {
             ));
         }
     }
+
+
     // --- score file reading ---
+    private enum ScoreState { MISSING, FAILED, VALID }
+    private record ScoreResult(Double value, ScoreState state) {}
 
     /**
-     * Reads a single floating-point number from a text file. Returns null
-     * if the file doesn't exist or its content isn't parseable as a number.
+     * Reads a score file. Returns:
+     *   - VALID with the parsed value, for a normal number
+     *   - FAILED, if the file's content is exactly -1 (no tumor nuclei found)
+     *   - MISSING, if the file doesn't exist or can't be parsed at all
      */
-    private static Double readScoreFile(Path mageeDir, String filename) {
+    private static ScoreResult readScoreFile(Path mageeDir, String filename) {
         File exact = mageeDir.resolve(filename).toFile();
         File target = exact.isFile() ? exact : findCaseInsensitive(mageeDir, filename);
 
         if (target == null)
-            return null;
+            return new ScoreResult(null, ScoreState.MISSING);
 
         try {
             String content = Files.readString(target.toPath()).trim();
-            return Double.parseDouble(content);
+            double value = Double.parseDouble(content);
+            if (value == -1.0)
+                return new ScoreResult(null, ScoreState.FAILED);
+            return new ScoreResult(value, ScoreState.VALID);
         } catch (IOException | NumberFormatException ex) {
             logger.warn("Could not read score from {}: {}", target.getName(), ex.getMessage());
-            return null;
+            return new ScoreResult(null, ScoreState.MISSING);
         }
     }
 
@@ -364,33 +413,6 @@ public class MageeTools {
         return new Result(me1, me2, me3, decision);
     }
 
-    // --- CSV output ---
-
-    private static void appendToCsv(Path mageeDir, Inputs v, Result r) throws IOException {
-        File csvFile = mageeDir.resolve("magee.csv").toFile();
-        boolean writeHeader = !csvFile.exists();
-
-        try (PrintWriter writer = new PrintWriter(new FileWriter(csvFile, true))) {
-            if (writeHeader)
-                writer.println(String.join(",", CSV_COLUMNS));
-
-            writer.println(String.join(",",
-                    escapeCsv(v.accessionId()),
-                    String.valueOf(v.er()),
-                    String.valueOf(v.pr()),
-                    String.valueOf(v.ki67()),
-                    String.valueOf(v.nottingham()),
-                    String.valueOf(v.mitotic()),
-                    String.valueOf(v.her2Ihc()),
-                    String.valueOf(v.her2Sish()),
-                    String.valueOf(v.tumorSize()),
-                    String.valueOf(r.me1()),
-                    String.valueOf(r.me2()),
-                    String.valueOf(r.me3()),
-                    escapeCsv(r.decision())
-            ));
-        }
-    }
 
     private static String escapeCsv(String s) {
         if (s.contains(",") || s.contains("\""))
