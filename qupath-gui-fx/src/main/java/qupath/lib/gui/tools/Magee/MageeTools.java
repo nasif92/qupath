@@ -7,10 +7,14 @@ import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.Month;
+import java.time.YearMonth;
+import java.time.format.TextStyle;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -20,7 +24,9 @@ import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.stage.Window;
+import javafx.util.StringConverter;
 
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
@@ -43,6 +49,8 @@ public class MageeTools {
     );
 
     private static final List<String> GENDER_OPTIONS = List.of("Female", "Male", "Other", "Unknown");
+
+    private static final int EARLIEST_BIRTH_YEAR = 1900;
 
     private MageeTools() {}
 
@@ -176,9 +184,15 @@ public class MageeTools {
         dialog.getDialogPane().setContent(grid);
 
         ButtonType calcType = new ButtonType("Calculate", ButtonBar.ButtonData.APPLY);
-        ButtonType patientType = new ButtonType("Add Patient Info", ButtonBar.ButtonData.OTHER);
+        ButtonType patientType = new ButtonType("Enter Patient Info", ButtonBar.ButtonData.OTHER);
         ButtonType saveType = new ButtonType("Save to CSV", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(calcType, patientType, saveType, ButtonType.CANCEL);
+
+        // Lay buttons out in workflow order (the order added above) instead of
+        // the platform-specific ordering ButtonBar applies by default.
+        ButtonBar buttonBar = (ButtonBar) dialog.getDialogPane().lookup(".button-bar");
+        if (buttonBar != null)
+            buttonBar.setButtonOrder(ButtonBar.BUTTON_ORDER_NONE);
 
         Button patientBtn = (Button) dialog.getDialogPane().lookupButton(patientType);
         updatePatientButton(patientBtn, patientInfo.get());
@@ -260,7 +274,7 @@ public class MageeTools {
 
     private static void updatePatientButton(Button btn, PatientInfo info) {
         if (btn != null)
-            btn.setText(info.isEmpty() ? "Add Patient Info" : "Enter Patient Info");
+            btn.setText(info.isEmpty() ? "Enter Patient Info" : "Enter Patient Info");
     }
 
     /**
@@ -270,15 +284,57 @@ public class MageeTools {
     private static Optional<PatientInfo> showPatientInfoDialog(Window owner, PatientInfo current) {
         Dialog<PatientInfo> d = new Dialog<>();
         d.setTitle("Patient Information");
-        d.setHeaderText("Optional information \nSaved to magee.csv");
+        d.setHeaderText("Enter Patient Info for Exporting to CSV");
         if (owner != null)
             d.initOwner(owner);
 
         TextField nameField = new TextField(current.name());
         nameField.setPromptText("Full name");
 
-        TextField dobField = new TextField(current.dob());
-        dobField.setPromptText("YYYY-MM-DD");
+        // --- DOB as Year / Month / Day dropdowns ---
+        int thisYear = LocalDate.now().getYear();
+        ComboBox<Integer> yearBox = new ComboBox<>();
+        for (int y = thisYear; y >= EARLIEST_BIRTH_YEAR; y--)
+            yearBox.getItems().add(y);
+        yearBox.setPromptText("Year");
+        yearBox.setVisibleRowCount(12);
+
+        ComboBox<Integer> monthBox = new ComboBox<>();
+        for (int m = 1; m <= 12; m++)
+            monthBox.getItems().add(m);
+        monthBox.setPromptText("Month");
+        monthBox.setVisibleRowCount(12);
+        monthBox.setConverter(new StringConverter<>() {
+            @Override public String toString(Integer m) {
+                return m == null ? "" : Month.of(m).getDisplayName(TextStyle.FULL, Locale.ENGLISH);
+            }
+            @Override public Integer fromString(String s) { return null; } // not editable
+        });
+
+        ComboBox<Integer> dayBox = new ComboBox<>();
+        dayBox.setPromptText("Day");
+        dayBox.setVisibleRowCount(12);
+        refreshDays(dayBox, null, null);
+
+        // Keep the day list valid for the chosen month/year (e.g. no Feb 30).
+        yearBox.valueProperty().addListener((obs, o, n) -> refreshDays(dayBox, n, monthBox.getValue()));
+        monthBox.valueProperty().addListener((obs, o, n) -> refreshDays(dayBox, yearBox.getValue(), n));
+
+        // Pre-fill from a previously saved DOB (yyyy-MM-dd)
+        if (!current.dob().isBlank()) {
+            try {
+                LocalDate saved = LocalDate.parse(current.dob());
+                if (!yearBox.getItems().contains(saved.getYear()))
+                    yearBox.getItems().add(saved.getYear());
+                yearBox.setValue(saved.getYear());
+                monthBox.setValue(saved.getMonthValue());
+                dayBox.setValue(saved.getDayOfMonth());
+            } catch (DateTimeParseException ex) {
+                logger.warn("Could not parse saved DOB '{}': {}", current.dob(), ex.getMessage());
+            }
+        }
+
+        HBox dobBox = new HBox(6, yearBox, monthBox, dayBox);
 
         ComboBox<String> genderBox = new ComboBox<>();
         genderBox.getItems().addAll(GENDER_OPTIONS);
@@ -293,7 +349,9 @@ public class MageeTools {
         Button clearBtn = new Button("Clear all");
         clearBtn.setOnAction(e -> {
             nameField.clear();
-            dobField.clear();
+            yearBox.setValue(null);
+            monthBox.setValue(null);
+            dayBox.setValue(null);
             genderBox.getSelectionModel().clearSelection();
             genderBox.setValue(null);
         });
@@ -304,28 +362,28 @@ public class MageeTools {
         grid.setPadding(new Insets(10));
         int row = 0;
         grid.addRow(row++, new Label("Patient Name"), nameField);
-        grid.addRow(row++, new Label("Date of Birth"), dobField);
+        grid.addRow(row++, new Label("Date of Birth"), dobBox);
         grid.addRow(row++, new Label("Gender"), genderBox);
         grid.add(clearBtn, 1, row++);
 
         d.getDialogPane().setContent(grid);
         d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
-        // Validate the DOB only if something was typed; blank is fine.
+        // DOB is optional: all three blank is fine, all three set is fine, partial is not.
         Node okBtn = d.getDialogPane().lookupButton(ButtonType.OK);
         okBtn.addEventFilter(ActionEvent.ACTION, e -> {
-            String dob = cleanText(dobField.getText());
-            if (dob.isEmpty())
+            Integer y = yearBox.getValue(), m = monthBox.getValue(), day = dayBox.getValue();
+            int chosen = (y != null ? 1 : 0) + (m != null ? 1 : 0) + (day != null ? 1 : 0);
+            if (chosen == 0)
                 return;
-            try {
-                LocalDate date = LocalDate.parse(dob); // ISO yyyy-MM-dd
-                if (date.isAfter(LocalDate.now())) {
-                    Dialogs.showErrorMessage("Invalid date of birth", "Date of birth cannot be in the future.");
-                    e.consume();
-                }
-            } catch (DateTimeParseException ex) {
-                Dialogs.showErrorMessage("Invalid date of birth",
-                        "Please use the format YYYY-MM-DD (e.g. 1965-04-17), or leave it blank.");
+            if (chosen < 3) {
+                Dialogs.showErrorMessage("Incomplete date of birth",
+                        "Please select a year, month and day — or leave all three blank.");
+                e.consume();
+                return;
+            }
+            if (LocalDate.of(y, m, day).isAfter(LocalDate.now())) {
+                Dialogs.showErrorMessage("Invalid date of birth", "Date of birth cannot be in the future.");
                 e.consume();
             }
         });
@@ -333,11 +391,34 @@ public class MageeTools {
         d.setResultConverter(bt -> bt == ButtonType.OK
                 ? new PatientInfo(
                 cleanText(nameField.getText()),
-                cleanText(dobField.getText()),
+                formatDob(yearBox.getValue(), monthBox.getValue(), dayBox.getValue()),
                 cleanText(genderBox.getValue()))
                 : null);
 
         return d.showAndWait();
+    }
+
+    /**
+     * Rebuilds the day list (1..days in month) for the given year/month.
+     * With no month chosen, shows 1-31. Clears the current day if it no longer fits.
+     */
+    private static void refreshDays(ComboBox<Integer> dayBox, Integer year, Integer month) {
+        int maxDay = 31;
+        if (month != null)
+            maxDay = (year != null) ? YearMonth.of(year, month).lengthOfMonth()
+                    : Month.of(month).maxLength(); // Feb -> 29 until a year is picked
+        Integer selected = dayBox.getValue();
+        dayBox.getItems().clear();
+        for (int d = 1; d <= maxDay; d++)
+            dayBox.getItems().add(d);
+        dayBox.setValue(selected != null && selected <= maxDay ? selected : null);
+    }
+
+    /** Returns yyyy-MM-dd when all three parts are set, otherwise "". */
+    private static String formatDob(Integer year, Integer month, Integer day) {
+        if (year == null || month == null || day == null)
+            return "";
+        return LocalDate.of(year, month, day).toString();
     }
 
     /** Null-safe trim that also flattens any line breaks (which would break the CSV row). */
