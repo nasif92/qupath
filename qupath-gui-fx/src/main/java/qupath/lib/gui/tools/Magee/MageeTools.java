@@ -6,12 +6,21 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
+import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
+import javafx.stage.Window;
 
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
@@ -24,11 +33,16 @@ public class MageeTools {
 
     private static final Logger logger = LoggerFactory.getLogger(MageeTools.class);
 
+    // Patient columns are appended at the end so any consumer reading the
+    // Magee columns by position is unaffected.
     private static final List<String> CSV_COLUMNS = List.of(
             "accession_id", "ER H-Score", "PR H-Score", "Ki67 %",
             "Nottingham Score", "Mitotic Score", "HER2 IHC", "HER2 SISH", "Tumor size",
-            "Magee Eq 1", "Magee Eq 2", "Magee Eq 3", "Magee Decision"
+            "Magee Eq 1", "Magee Eq 2", "Magee Eq 3", "Magee Decision",
+            "Patient Name", "Patient DOB", "Patient Gender"
     );
+
+    private static final List<String> GENDER_OPTIONS = List.of("Female", "Male", "Other", "Unknown");
 
     private MageeTools() {}
 
@@ -82,6 +96,10 @@ public class MageeTools {
 
         // --- check for an already-saved row and pre-fill from it ---
         var existingRow = readExistingCsvRow(mageeDir);
+
+        // Patient info lives outside the Magee form; it's edited in its own dialog.
+        AtomicReference<PatientInfo> patientInfo =
+                new AtomicReference<>(PatientInfo.fromRow(existingRow));
 
         // --- build form fields ---
         TextField accessionField = new TextField(accessionId);
@@ -158,21 +176,26 @@ public class MageeTools {
         dialog.getDialogPane().setContent(grid);
 
         ButtonType calcType = new ButtonType("Calculate", ButtonBar.ButtonData.APPLY);
+        ButtonType patientType = new ButtonType("Add Patient Info", ButtonBar.ButtonData.OTHER);
         ButtonType saveType = new ButtonType("Save to CSV", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(calcType, saveType, ButtonType.CANCEL);
+        dialog.getDialogPane().getButtonTypes().addAll(calcType, patientType, saveType, ButtonType.CANCEL);
+
+        Button patientBtn = (Button) dialog.getDialogPane().lookupButton(patientType);
+        updatePatientButton(patientBtn, patientInfo.get());
 
         if (anyFailed) {
             Node calcBtnNode = dialog.getDialogPane().lookupButton(calcType);
             Node saveBtnNode = dialog.getDialogPane().lookupButton(saveType);
             if (calcBtnNode != null) calcBtnNode.setDisable(true);
             if (saveBtnNode != null) saveBtnNode.setDisable(true);
+            if (patientBtn != null) patientBtn.setDisable(true); // nothing can be saved anyway
         }
 
         if (qupath.getStage() != null)
             dialog.initOwner(qupath.getStage());
 
         Node calcBtn = dialog.getDialogPane().lookupButton(calcType);
-        calcBtn.addEventFilter(javafx.event.ActionEvent.ACTION, e -> {
+        calcBtn.addEventFilter(ActionEvent.ACTION, e -> {
             try {
                 var vals = parseAndValidate(accessionField, erField, prField, ki67Field,
                         nottinghamBox, mitoticBox, her2IhcBox, her2SishField, tumorSizeField);
@@ -186,6 +209,16 @@ public class MageeTools {
             e.consume();
         });
 
+        // Opens the patient-info dialog on top of this one without closing it.
+        patientBtn.addEventFilter(ActionEvent.ACTION, e -> {
+            e.consume();
+            Window owner = dialog.getDialogPane().getScene().getWindow();
+            showPatientInfoDialog(owner, patientInfo.get()).ifPresent(info -> {
+                patientInfo.set(info);
+                updatePatientButton(patientBtn, info);
+            });
+        });
+
         var choice = dialog.showAndWait();
         if (choice.isEmpty() || choice.get() != saveType)
             return;
@@ -194,7 +227,7 @@ public class MageeTools {
             var vals = parseAndValidate(accessionField, erField, prField, ki67Field,
                     nottinghamBox, mitoticBox, her2IhcBox, her2SishField, tumorSizeField);
             var result = compute(vals);
-            writePatientCsv(mageeDir, vals, result);
+            writePatientCsv(mageeDir, vals, result, patientInfo.get());
             Dialogs.showInfoNotification("Magee Calculator",
                     "Row for '" + vals.accessionId() + "' saved to magee.csv");
         } catch (IllegalArgumentException ex) {
@@ -204,6 +237,117 @@ public class MageeTools {
             Dialogs.showErrorNotification("Magee Calculator", "Failed to save: " + ex.getMessage());
         }
     }
+
+    // --- patient info ---
+
+    /** Optional patient details. Not used by the Magee equations. Fields are never null. */
+    private record PatientInfo(String name, String dob, String gender) {
+        static final PatientInfo EMPTY = new PatientInfo("", "", "");
+
+        boolean isEmpty() {
+            return name.isBlank() && dob.isBlank() && gender.isBlank();
+        }
+
+        static PatientInfo fromRow(Map<String, String> row) {
+            if (row == null)
+                return EMPTY;
+            return new PatientInfo(
+                    cleanText(row.get("Patient Name")),
+                    cleanText(row.get("Patient DOB")),
+                    cleanText(row.get("Patient Gender")));
+        }
+    }
+
+    private static void updatePatientButton(Button btn, PatientInfo info) {
+        if (btn != null)
+            btn.setText(info.isEmpty() ? "Add Patient Info" : "Enter Patient Info");
+    }
+
+    /**
+     * Shows a modal dialog (owned by the Magee dialog) for entering optional patient info.
+     * Returns the new info on OK, or empty on Cancel (in which case nothing changes).
+     */
+    private static Optional<PatientInfo> showPatientInfoDialog(Window owner, PatientInfo current) {
+        Dialog<PatientInfo> d = new Dialog<>();
+        d.setTitle("Patient Information");
+        d.setHeaderText("Optional information \nSaved to magee.csv");
+        if (owner != null)
+            d.initOwner(owner);
+
+        TextField nameField = new TextField(current.name());
+        nameField.setPromptText("Full name");
+
+        TextField dobField = new TextField(current.dob());
+        dobField.setPromptText("YYYY-MM-DD");
+
+        ComboBox<String> genderBox = new ComboBox<>();
+        genderBox.getItems().addAll(GENDER_OPTIONS);
+        genderBox.setPromptText("Select");
+        if (!current.gender().isBlank()) {
+            // Keep a previously saved value even if it isn't one of the standard options
+            if (!genderBox.getItems().contains(current.gender()))
+                genderBox.getItems().add(current.gender());
+            genderBox.setValue(current.gender());
+        }
+
+        Button clearBtn = new Button("Clear all");
+        clearBtn.setOnAction(e -> {
+            nameField.clear();
+            dobField.clear();
+            genderBox.getSelectionModel().clearSelection();
+            genderBox.setValue(null);
+        });
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(8);
+        grid.setPadding(new Insets(10));
+        int row = 0;
+        grid.addRow(row++, new Label("Patient Name"), nameField);
+        grid.addRow(row++, new Label("Date of Birth"), dobField);
+        grid.addRow(row++, new Label("Gender"), genderBox);
+        grid.add(clearBtn, 1, row++);
+
+        d.getDialogPane().setContent(grid);
+        d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        // Validate the DOB only if something was typed; blank is fine.
+        Node okBtn = d.getDialogPane().lookupButton(ButtonType.OK);
+        okBtn.addEventFilter(ActionEvent.ACTION, e -> {
+            String dob = cleanText(dobField.getText());
+            if (dob.isEmpty())
+                return;
+            try {
+                LocalDate date = LocalDate.parse(dob); // ISO yyyy-MM-dd
+                if (date.isAfter(LocalDate.now())) {
+                    Dialogs.showErrorMessage("Invalid date of birth", "Date of birth cannot be in the future.");
+                    e.consume();
+                }
+            } catch (DateTimeParseException ex) {
+                Dialogs.showErrorMessage("Invalid date of birth",
+                        "Please use the format YYYY-MM-DD (e.g. 1965-04-17), or leave it blank.");
+                e.consume();
+            }
+        });
+
+        d.setResultConverter(bt -> bt == ButtonType.OK
+                ? new PatientInfo(
+                cleanText(nameField.getText()),
+                cleanText(dobField.getText()),
+                cleanText(genderBox.getValue()))
+                : null);
+
+        return d.showAndWait();
+    }
+
+    /** Null-safe trim that also flattens any line breaks (which would break the CSV row). */
+    private static String cleanText(String s) {
+        if (s == null)
+            return "";
+        return s.replaceAll("[\\r\\n]+", " ").trim();
+    }
+
+    // --- form field helpers ---
 
     private static TextField buildScoreField(ScoreResult result) {
         TextField field = new TextField();
@@ -233,12 +377,15 @@ public class MageeTools {
     private static void styleFailed(TextField field) {
         field.setStyle("-fx-control-inner-background: #d9d9d9; -fx-opacity: 1; -fx-text-fill: red; -fx-font-weight: bold;");
     }
+
+    // --- CSV I/O ---
+
     /**
      * Reads the single data row from an existing magee.csv, if present, as a
      * column-name -> value map. Returns null if the file doesn't exist or
      * can't be parsed.
      */
-    private static java.util.Map<String, String> readExistingCsvRow(Path mageeDir) {
+    private static Map<String, String> readExistingCsvRow(Path mageeDir) {
         File csvFile = mageeDir.resolve("magee.csv").toFile();
         if (!csvFile.isFile())
             return null;
@@ -248,15 +395,15 @@ public class MageeTools {
             if (lines.size() < 2)
                 return null; // header only, or empty
 
-            String[] headers = lines.get(0).split(",");
-            String[] values = lines.get(1).split(",");
+            List<String> headers = parseCsvLine(lines.get(0));
+            List<String> values = parseCsvLine(lines.get(1));
 
-            if (headers.length != values.length)
+            if (headers.size() != values.size())
                 return null;
 
-            java.util.Map<String, String> row = new java.util.LinkedHashMap<>();
-            for (int i = 0; i < headers.length; i++)
-                row.put(headers[i].trim(), values[i].trim());
+            Map<String, String> row = new LinkedHashMap<>();
+            for (int i = 0; i < headers.size(); i++)
+                row.put(headers.get(i).trim(), values.get(i).trim());
             return row;
         } catch (IOException ex) {
             logger.warn("Could not read existing magee.csv: {}", ex.getMessage());
@@ -264,8 +411,43 @@ public class MageeTools {
         }
     }
 
-    private static void writePatientCsv(Path mageeDir, Inputs v, Result r) throws IOException {
+    /**
+     * Splits one CSV line, honouring double-quoted fields (so "Doe, Jane" stays
+     * one value) and keeping trailing empty fields (e.g. a blank gender).
+     */
+    private static List<String> parseCsvLine(String line) {
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (inQuotes) {
+                if (c == '"') {
+                    if (i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                        cur.append('"');
+                        i++;
+                    } else {
+                        inQuotes = false;
+                    }
+                } else {
+                    cur.append(c);
+                }
+            } else if (c == '"') {
+                inQuotes = true;
+            } else if (c == ',') {
+                out.add(cur.toString());
+                cur.setLength(0);
+            } else {
+                cur.append(c);
+            }
+        }
+        out.add(cur.toString());
+        return out;
+    }
+
+    private static void writePatientCsv(Path mageeDir, Inputs v, Result r, PatientInfo p) throws IOException {
         File csvFile = mageeDir.resolve("magee.csv").toFile();
+        PatientInfo info = p == null ? PatientInfo.EMPTY : p;
 
         try (PrintWriter writer = new PrintWriter(new FileWriter(csvFile, false))) { // false = overwrite, single row
             writer.println(String.join(",", CSV_COLUMNS));
@@ -282,7 +464,10 @@ public class MageeTools {
                     String.valueOf(r.me1()),
                     String.valueOf(r.me2()),
                     String.valueOf(r.me3()),
-                    escapeCsv(r.decision())
+                    escapeCsv(r.decision()),
+                    escapeCsv(info.name()),
+                    escapeCsv(info.dob()),
+                    escapeCsv(info.gender())
             ));
         }
     }
@@ -415,7 +600,9 @@ public class MageeTools {
 
 
     private static String escapeCsv(String s) {
-        if (s.contains(",") || s.contains("\""))
+        if (s == null)
+            return "";
+        if (s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r"))
             return "\"" + s.replace("\"", "\"\"") + "\"";
         return s;
     }
