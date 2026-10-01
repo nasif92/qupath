@@ -81,6 +81,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import qupath.lib.gui.tools.Magee.AnnotationExportTool;
+import qupath.lib.gui.tools.Magee.DetectionImportTool;
+import qupath.lib.gui.tools.Magee.MageeTools;
 
 class ToolBarComponent {
 
@@ -127,6 +130,34 @@ class ToolBarComponent {
 		toolIdx = nodes.size();
 
 		addToolButtons(nodes, availableTools);
+
+		nodes.add(createSeparator());
+
+		var btnExport = new Button();
+		btnExport.setId("annExportButton");
+		btnExport.setTooltip(new Tooltip("Export annotations"));
+		btnExport.setGraphic(IconFactory.createNode(
+				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.ARROW_END_TOOL));
+		btnExport.setOnAction(e -> AnnotationExportTool.exportCurrentImageAnnotations(QuPathGUI.getInstance()));
+		nodes.add(btnExport);
+
+		var btnImport = new Button();
+		btnImport.setId("annImportButton");
+		btnImport.setTooltip(new Tooltip("Import detections"));
+		btnImport.setGraphic(IconFactory.createNode(
+				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.DOWNLOAD));
+		btnImport.setOnAction(e -> DetectionImportTool.importCurrentImageDetections(QuPathGUI.getInstance()));
+		nodes.add(btnImport);
+
+		nodes.add(createSeparator());
+
+		var btnMagee = new Button();
+		btnMagee.setId("mageeButton");
+		btnMagee.setTooltip(new Tooltip("Magee equation calculator"));
+		btnMagee.setGraphic(IconFactory.createNode(
+				QuPathGUI.TOOLBAR_ICON_SIZE, QuPathGUI.TOOLBAR_ICON_SIZE, PathIcons.MEASURE));
+		btnMagee.setOnAction(e -> MageeTools.showMageeCalculator(QuPathGUI.getInstance()));
+		nodes.add(btnMagee);
 
 		nodes.add(createSeparator());
 

@@ -274,7 +274,7 @@ public class MageeTools {
 
     private static void updatePatientButton(Button btn, PatientInfo info) {
         if (btn != null)
-            btn.setText(info.isEmpty() ? "Enter Patient Info" : "Enter Patient Info");
+            btn.setText("Enter Patient Info");
     }
 
     /**
@@ -399,7 +399,7 @@ public class MageeTools {
     }
 
     /**
-     * Rebuilds the day list (1..days in month) for the given year/month.
+     * Rebuilds the day list (1.days in month) for the given year/month.
      * With no month chosen, shows 1-31. Clears the current day if it no longer fits.
      */
     private static void refreshDays(ComboBox<Integer> dayBox, Integer year, Integer month) {
